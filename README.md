@@ -2,7 +2,7 @@
 
 An independent Android project from Wonderdesk by Rednave. This is the existing Android preview, not a full port of the former Linux application.
 
-Browse months, jump to a specific date, and hand an event to an installed Android calendar app. Event storage, reminders, and synchronization are managed by that external app.
+Browse months, jump to a specific date, choose a 30/60/120-minute duration for the 9am event, and hand it to an installed Android calendar app. Event storage, reminders, and synchronization are managed by that external app.
 
 ## Build
 
@@ -16,7 +16,7 @@ The debug APK is in `chronicle/build/outputs/apk/debug/`. It is not a production
 
 ## Appearance
 
-Aqua is the default. Open About to choose Aqua, Bliss, Dark Bliss, or Super and adjust motion independently in this app. Aqua and Super have ambient motion when Full motion and Android animations are enabled; Reduced and Off use still backgrounds. These Compose adaptations are not yet exact ports of BlissPlayer's typography, dialogs, click effects, or every control. Existing feature and platform limitations are described in the app's About screen. Artwork may still be temporary.
+Aqua is the default. Open About to choose Aqua, Bliss, Dark Bliss, or Super and adjust motion independently in this app. Aqua and Super have ambient motion and tap bursts when Full motion and Android animations are enabled; Reduced uses smaller bursts with no ambient drift, and Off is still. Type now uses the owner's Bliss, Aqua and Super fonts (Dark Bliss uses the system font), dialogs are themed per look, and Aqua/Super show owner brand art in the header. These Compose adaptations are not yet exact ports of BlissPlayer's dialogs, click effects, or every control. Existing feature and platform limitations are described in the app's About screen. Artwork may still be temporary, but the launcher icon is owner-supplied (your SVG, rasterized in-repo).
 
 The `shared` module is vendored so this repository builds without the monorepo or other Wonderdesk repositories. Changes to shared code must currently be propagated to the other repositories manually. Third-party license notices are in `shared/src/main/assets/licenses/`.
 

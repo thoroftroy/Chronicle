@@ -20,6 +20,12 @@ import java.time.format.DateTimeFormatter
 /** Keep the selected day in the displayed month, clamping at shorter month ends. */
 fun shiftCalendarSelection(date: LocalDate, months: Long): LocalDate = date.plusMonths(months)
 
+/** Fixed 9am start; durations are the only choices offered, so no other validation is needed. */
+fun chronicleEventEnd(startMillis: Long, durationMinutes: Int): Long {
+    require(durationMinutes in listOf(30, 60, 120)) { "Unsupported duration" }
+    return startMillis + durationMinutes * 60_000L
+}
+
 @Composable
 fun CalendarScreen() {
     val context = LocalContext.current
@@ -27,6 +33,7 @@ fun CalendarScreen() {
     var monthText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     var selectedText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     var title by rememberSaveable { mutableStateOf("") }
+    var durationMinutes by rememberSaveable { mutableIntStateOf(60) }
     val month = YearMonth.parse(monthText)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -60,13 +67,18 @@ fun CalendarScreen() {
             }, selected.year, selected.monthValue - 1, selected.dayOfMonth).show()
         }) { Text("Jump to date…") }
         OutlinedTextField(title, { title = it.take(200) }, Modifier.fillMaxWidth(), label = { Text("Event title") }, singleLine = true)
+        Row(Modifier.fillMaxWidth()) {
+            listOf(30, 60, 120).forEach { minutes ->
+                TextButton(onClick = { durationMinutes = minutes }, modifier = Modifier.weight(1f)) { Text(if (durationMinutes == minutes) "• $minutes min" else "$minutes min") }
+            }
+        }
         AquaButton(onClick = {
             val start = LocalDate.parse(selectedText).atTime(9, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             context.launchSafely(Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
                 .putExtra(CalendarContract.Events.TITLE, title)
                 .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
-                .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, start + 60 * 60 * 1000L), op::notice)
-        }, enabled = title.isNotBlank()) { Text("Create in calendar app…") }
+                .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, chronicleEventEnd(start, durationMinutes)), op::notice)
+        }, enabled = title.isNotBlank()) { Text("Create ${durationMinutes}-min event in calendar app…") }
         OperationStatus(op)
         Text("Review and save the event in your installed calendar app. Chronicle does not claim it was saved, request calendar access or upload anything. Calendar accounts/reminders are managed by that app.", style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = { monthText = YearMonth.now().toString(); selectedText = LocalDate.now().toString() }) { Text("Today") }

@@ -1,5 +1,5 @@
 {
-  "ecosystem": "0.2.22",
+  "ecosystem": "0.3.0",
   "apps": {
     "wayfinder": "0.2.4",
     "packrat": "0.2.5",
@@ -11,7 +11,7 @@
     "scribble": "0.2.3",
     "pulse": "0.2.3",
     "abacus": "0.2.4",
-    "chronicle": "0.2.11",
+    "chronicle": "0.3.0",
     "timepiece": "0.2.4",
     "safekeeper": "0.2.3",
     "beacon": "0.2.3",

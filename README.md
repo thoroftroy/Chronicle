@@ -1,20 +1,25 @@
-# Chronicle for Android
+# Chronicle
 
-A month calendar that hands events to your calendar app.
+A calendar for your phone that works with Google Calendar and your other accounts.
 
-## Easiest install and updates
+## What it does
 
-Get App Hub once from https://github.com/thoroftroy/App-Hub/releases, then use it to install and update this app and the rest of the suite. You will not need to download APKs by hand.
-## Install
+- Shows and edits the calendars already on your phone, so events sync with Google or any other account you've added. Events can also stay only on the phone.
+- Month, day (timeline) and agenda views. Swipe between months and days. **Go to date** jumps to any month or year, or understands phrases like "next friday" and "in 3 weeks".
+- Every event shows a countdown ("in 2 days"). Repeating events, reminders, locations and notes are supported.
+- **Tasks** with due dates, times and an Important flag. Tasks show in the month view and notify you when they're due.
+- Event reminders as notifications, a home-screen widget with your next events, and .ics import and export.
 
-Install the APK, then open the app. Your phone may ask you to allow unknown sources first. Needs Android 10 or newer.
-## Using Chronicle
+## Install and update
 
-- Swipe through months or jump straight to a date.
-- Pick a day, type an event, choose 30, 60 or 120 minutes, and send it to your calendar app to review and save.
+The easiest way is Wonderdesk Apphub: get it once from https://github.com/thoroftroy/App-Hub/releases, then install and update this app and the rest of the suite from there.
 
-Storage and reminders live in your calendar app, not here.
+Or download the APK from this repository's Releases, open it, and allow installing from that source if your phone asks. Needs Android 10 or newer.
 
 ## Look and feel
 
-Open About in the app to change the theme or motion. Aqua is the default.
+Every Wonderdesk app follows the look you pick in Control Room (Aqua, Bliss, Dark Bliss or Super). You can give this app its own look in its Settings.
+
+## Privacy
+
+Everything stays on your phone. No accounts, ads or tracking.

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@drawable/widget_bg" android:padding="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@+id/w_day" android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/widget_header" android:gravity="center"
+            android:textColor="#FFFFFFFF" android:textSize="22sp" android:textStyle="bold" />
+        <TextView android:id="@+id/w_month" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="10dp"
+            android:textColor="#FF1B1D21" android:textSize="16sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/w_add" android:layout_width="36dp" android:layout_height="36dp" android:gravity="center" android:text="+" android:textSize="24sp" android:textColor="#FF1E7FE8" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="8dp">
+        <LinearLayout android:id="@+id/w_row1" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="5dp" android:paddingBottom="5dp">
+            <ImageView android:id="@+id/w_d1" android:layout_width="10dp" android:layout_height="10dp" android:src="@drawable/widget_dot" android:layout_marginEnd="10dp" />
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/w_t1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF1B1D21" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:id="@+id/w_s1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF6B7078" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/w_row2" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="5dp" android:paddingBottom="5dp">
+            <ImageView android:id="@+id/w_d2" android:layout_width="10dp" android:layout_height="10dp" android:src="@drawable/widget_dot" android:layout_marginEnd="10dp" />
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/w_t2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF1B1D21" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:id="@+id/w_s2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF6B7078" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/w_row3" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="5dp" android:paddingBottom="5dp">
+            <ImageView android:id="@+id/w_d3" android:layout_width="10dp" android:layout_height="10dp" android:src="@drawable/widget_dot" android:layout_marginEnd="10dp" />
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/w_t3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF1B1D21" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:id="@+id/w_s3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF6B7078" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/w_row4" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="5dp" android:paddingBottom="5dp">
+            <ImageView android:id="@+id/w_d4" android:layout_width="10dp" android:layout_height="10dp" android:src="@drawable/widget_dot" android:layout_marginEnd="10dp" />
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/w_t4" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF1B1D21" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:id="@+id/w_s4" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF6B7078" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/w_row5" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="5dp" android:paddingBottom="5dp">
+            <ImageView android:id="@+id/w_d5" android:layout_width="10dp" android:layout_height="10dp" android:src="@drawable/widget_dot" android:layout_marginEnd="10dp" />
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/w_t5" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF1B1D21" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:id="@+id/w_s5" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FF6B7078" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+            </LinearLayout>
+        </LinearLayout>
+        <TextView android:id="@+id/w_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Nothing coming up. Enjoy the free time." android:textColor="#FF6B7078" android:textSize="13sp" android:paddingTop="8dp" />
+    </LinearLayout>
+</LinearLayout>

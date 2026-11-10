@@ -223,7 +223,7 @@ private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: 
     val cells = (0 until 42).map { gridStart.plusDays(it.toLong()) }
     val occ = rememberOccurrences(repo, cells.first().startMs(), cells.last().plusDays(1).startMs(), rev)
     val today = LocalDate.now()
-    val now by produceState(System.currentTimeMillis()) { while (true) { delay(30_000); value = System.currentTimeMillis() } }
+    val now = rememberNow(60_000)
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 8.dp).pointerInput(ym) {
             var dx = 0f

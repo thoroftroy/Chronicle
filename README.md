@@ -1,6 +1,6 @@
 # Chronicle for Android
 
-A month calendar that hands events to your calendar app. By Rednave.
+A month calendar that hands events to your calendar app.
 
 ## Easiest install and updates
 

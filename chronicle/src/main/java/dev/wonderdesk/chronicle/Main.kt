@@ -240,25 +240,40 @@ private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: 
                         style = MaterialTheme.typography.labelMedium, color = if (d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY) p.secondaryText.copy(alpha = .7f) else p.secondaryText)
                 }
             }
-            cells.chunked(7).forEach { week ->
-                Row(Modifier.fillMaxWidth()) {
-                    week.forEach { d ->
-                        val inMonth = d.month == ym.month
-                        val isSel = d == selected
-                        val isToday = d == today
-                        val dayOcc = occ.filter { it.covers(d, zone) }
-                        val hasTask = tasks.any { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == d }
-                        Column(Modifier.weight(1f).height(54.dp).padding(2.dp).clip(RoundedCornerShape(8.dp))
-                            .background(if (isSel) p.accent.copy(alpha = .14f) else Color.Transparent)
-                            .clickableWithDouble(onClick = { onSelect(d) }, onDouble = { onOpenDay(d) }),
-                            horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(Modifier.padding(top = 4.dp).size(26.dp).clip(CircleShape).background(if (isToday) Color(0xFFE5483C) else Color.Transparent), contentAlignment = Alignment.Center) {
-                                Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (isToday || isSel) FontWeight.Bold else FontWeight.Normal),
-                                    color = when { isToday -> Color.White; !inMonth -> p.secondaryText.copy(alpha = .45f); else -> p.text })
-                            }
-                            Row(Modifier.padding(top = 3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                dayOcc.take(3).forEach { o -> Box(Modifier.size(6.dp).clip(CircleShape).background(Color(o.color))) }
-                                if (hasTask) Box(Modifier.size(6.dp).clip(RoundedCornerShape(1.dp)).background(p.success))
+        }
+        // Each day shows its events by name, like a wall calendar.
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(.62f).padding(horizontal = 8.dp)) {
+            val rows = 6
+            val cellH = maxHeight / rows
+            Column(Modifier.fillMaxSize()) {
+                cells.chunked(7).forEach { week ->
+                    Row(Modifier.fillMaxWidth().height(cellH)) {
+                        week.forEach { d ->
+                            val inMonth = d.month == ym.month
+                            val isSel = d == selected
+                            val isToday = d == today
+                            val dayOcc = occ.filter { it.covers(d, zone) }.sortedWith(compareByDescending<Occurrence> { it.allDay }.thenBy { it.begin })
+                            val dayTasks = tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == d }
+                            val fit = ((cellH.value - 26) / 15).toInt().coerceIn(1, 5)
+                            Column(Modifier.weight(1f).fillMaxHeight().padding(1.dp).clip(RoundedCornerShape(6.dp))
+                                .background(when { isSel -> p.accent.copy(alpha = .14f); inMonth -> p.panel.copy(alpha = .55f); else -> Color.Transparent })
+                                .clickableWithDouble(d to isSel, onClick = { if (isSel) onOpenDay(d) else onSelect(d) }, onDouble = { onOpenDay(d) }).padding(2.dp)) {
+                                Box(Modifier.align(Alignment.CenterHorizontally).size(22.dp).clip(CircleShape).background(if (isToday) Color(0xFFE5483C) else Color.Transparent), contentAlignment = Alignment.Center) {
+                                    Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (isToday || isSel) FontWeight.Bold else FontWeight.Normal),
+                                        color = when { isToday -> Color.White; !inMonth -> p.secondaryText.copy(alpha = .45f); else -> p.text })
+                                }
+                                val shown = dayOcc.take(if (dayOcc.size + dayTasks.size > fit) fit - 1 else fit)
+                                shown.forEach { o ->
+                                    Text(o.title.ifBlank { "Event" }, Modifier.fillMaxWidth().padding(top = 1.dp).clip(RoundedCornerShape(3.dp))
+                                        .background(Color(o.color).copy(alpha = if (o.allDay) .85f else .22f)).padding(horizontal = 2.dp),
+                                        color = if (o.allDay) Color.White else p.text, fontSize = 10.sp, lineHeight = 12.sp, letterSpacing = (-0.2).sp,
+                                        maxLines = if (shown.size == 1 && dayTasks.isEmpty()) 2 else 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                if (shown.size < fit) dayTasks.take(fit - shown.size).forEach { t ->
+                                    Text("☐ " + t.title.ifBlank { "Task" }, Modifier.fillMaxWidth().padding(top = 1.dp), color = p.success, fontSize = 10.sp, lineHeight = 12.sp, letterSpacing = (-0.2).sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                val more = dayOcc.size + dayTasks.size - shown.size - (if (shown.size < fit) dayTasks.take(fit - shown.size).size else 0)
+                                if (more > 0) Text("+$more more", color = p.secondaryText, fontSize = 9.sp, lineHeight = 11.sp, maxLines = 1)
                             }
                         }
                     }
@@ -267,15 +282,17 @@ private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: 
         }
         val dayOcc = occ.filter { it.covers(selected, zone) }
         val dayTasks = tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == selected }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 16.dp)) {
+        LazyColumn(Modifier.fillMaxWidth().weight(.38f), contentPadding = PaddingValues(16.dp, 6.dp, 16.dp, 16.dp)) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp)) {
                     SectionLabel(when (selected) { today -> "Today"; today.plusDays(1) -> "Tomorrow"; today.minusDays(1) -> "Yesterday"; else -> selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM")) }, Modifier.weight(1f))
                     Text(daysAwayText(selected, today), style = MaterialTheme.typography.labelMedium, color = p.secondaryText)
+                    TextButton(onClick = { onOpenDay(selected) }) { Text("Open day") }
+                    TextButton(onClick = onNew) { Text("Add") }
                 }
             }
             if (dayOcc.isEmpty() && dayTasks.isEmpty()) item {
-                Panel { ListRow("Nothing planned", subtitle = "Tap + to add an event. Double-tap a date to see its timeline.", icon = WonderIcons.EventNote, tint = Color(0xFF7A7F87), onClick = onNew) }
+                Panel { ListRow("Nothing planned", subtitle = "Tap to add an event. Tap the date again to open its timeline.", icon = WonderIcons.EventNote, tint = Color(0xFF7A7F87), onClick = onNew) }
             }
             itemsIndexed(dayOcc) { i, o -> OccurrenceRow(o, now, Modifier.panelItem(i, dayOcc.size + dayTasks.size)) { onOpen(o) } }
             itemsIndexed(dayTasks) { i, t -> ListRow(t.title.ifBlank { "Untitled task" }, Modifier.panelItem(dayOcc.size + i, dayOcc.size + dayTasks.size), subtitle = "Task due",
@@ -290,8 +307,9 @@ private fun daysAwayText(d: LocalDate, today: LocalDate): String {
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-private fun Modifier.clickableWithDouble(onClick: () -> Unit, onDouble: () -> Unit) = this.then(
-    Modifier.pointerInput(Unit) { detectTapGestures(onTap = { onClick() }, onDoubleTap = { onDouble() }) })
+private fun Modifier.clickableWithDouble(key: Any, onClick: () -> Unit, onDouble: () -> Unit) = this.then(
+    // Keyed on the date: without it a cell kept the tap handler of the month it first showed.
+    Modifier.pointerInput(key) { detectTapGestures(onTap = { onClick() }, onDoubleTap = { onDouble() }) })
 
 @Composable
 private fun OccurrenceRow(o: Occurrence, now: Long, modifier: Modifier, onClick: () -> Unit) {

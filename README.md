@@ -8,7 +8,7 @@ A calendar for your phone that works with Google Calendar and your other account
 - Month, day (timeline) and agenda views. Swipe between months and days. **Go to date** jumps to any month or year, or understands phrases like "next friday" and "in 3 weeks".
 - Every event shows a countdown ("in 2 days"). Repeating events, reminders, locations and notes are supported.
 - **Tasks** with due dates, times and an Important flag. Tasks show in the month view and notify you when they're due.
-- Event reminders as notifications, a home-screen widget with your next events, and .ics import and export.
+- Month cells show event titles. Event reminders as notifications, home-screen widgets for your next events and a countdown, and .ics import and export.
 
 ## Install and update
 

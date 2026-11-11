@@ -110,6 +110,7 @@ class ChronicleWidget : AppWidgetProvider() {
         private val DOTS = listOf(R.id.w_d1, R.id.w_d2, R.id.w_d3, R.id.w_d4, R.id.w_d5)
 
         fun refresh(c: Context) {
+            runCatching { CountdownWidget.refresh(c) }
             val mgr = AppWidgetManager.getInstance(c)
             val ids = mgr.getAppWidgetIds(ComponentName(c, ChronicleWidget::class.java))
             if (ids.isNotEmpty()) ids.forEach { mgr.updateAppWidget(it, build(c)) }

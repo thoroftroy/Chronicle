@@ -1,5 +1,12 @@
 # Chronicle changelog
 
+## v0.5.1
+
+- Fixed the countdown widget saying “Nothing coming up”: it now reads just the event you picked (or looks ahead a day, a week, a month, a year), works on big synced calendars, and remembers your event even if the calendar is briefly unavailable
+- Widgets update in the background, so saving events and tasks no longer makes the app stutter
+- Much faster and smoother: the app is now built optimised (the way Play Store apps are), so screens open quicker, scrolling is fluid and the APK is about a quarter of the size
+- Screens and lists no longer decode pictures on the main thread, and skip redrawing parts that didn't change
+
 ## v0.5.0
 
 - Month view redesigned: only the weeks the month needs, so each day is much taller; events are clear coloured chips that fit more per day; selected day is outlined

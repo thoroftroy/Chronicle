@@ -63,10 +63,7 @@ class CountdownWidget : AppWidgetProvider() {
     companion object {
         const val PINNED = "dev.wonderdesk.chronicle.COUNTDOWN_PINNED"
 
-        fun refresh(c: Context) {
-            val mgr = AppWidgetManager.getInstance(c)
-            mgr.getAppWidgetIds(ComponentName(c, CountdownWidget::class.java)).forEach { id -> runCatching { mgr.updateAppWidget(id, build(c, id)) } }
-        }
+        fun refresh(c: Context) = updateAsync(c, AppWidgetManager.getInstance(c).getAppWidgetIds(ComponentName(c, CountdownWidget::class.java)))
 
         /** Asks the home screen to add a countdown for [eventId] (Android shows its own "Add to home screen?" prompt). */
         fun pin(c: Context, eventId: Long, title: String): Boolean {
@@ -77,13 +74,48 @@ class CountdownWidget : AppWidgetProvider() {
             return runCatching { mgr.requestPinAppWidget(ComponentName(c, CountdownWidget::class.java), null, cb) }.getOrDefault(false)
         }
 
-        private fun target(c: Context, cfg: CountdownConfig): Occurrence? {
-            if (ContextCompat.checkSelfPermission(c, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) return null
-            val now = System.currentTimeMillis(); val repo = CalendarRepo(c)
-            if (cfg.eventId == null) return repo.occurrences(now, now + 365L * 86_400_000L).filter { it.end > now }.minByOrNull { if (it.begin > now) it.begin else now }
-            // A chosen event: its next occurrence (for repeating ones), or the last one if it's over.
-            val ahead = repo.occurrences(now - 86_400_000L, now + 5 * 365L * 86_400_000L).filter { it.eventId == cfg.eventId && it.end > now }.minByOrNull { it.begin }
-            return ahead ?: repo.occurrences(now - 10 * 365L * 86_400_000L, now).filter { it.eventId == cfg.eventId }.maxByOrNull { it.begin }
+        /** Instances of the calendar between [from] and [to], optionally for one event only. Small, bounded queries. */
+        private fun instances(c: Context, from: Long, to: Long, eventId: Long?, limit: Int = 50): List<Occurrence> = runCatching {
+            val uri = android.provider.CalendarContract.Instances.CONTENT_URI.buildUpon().also { android.content.ContentUris.appendId(it, from); android.content.ContentUris.appendId(it, to) }.build()
+            val sel = if (eventId != null) "${android.provider.CalendarContract.Instances.EVENT_ID} = ?" else "${android.provider.CalendarContract.Instances.VISIBLE} = 1 AND ${android.provider.CalendarContract.Instances.END} > ?"
+            val args = if (eventId != null) arrayOf(eventId.toString()) else arrayOf(System.currentTimeMillis().toString())
+            c.contentResolver.query(uri, arrayOf(android.provider.CalendarContract.Instances.EVENT_ID, android.provider.CalendarContract.Instances.TITLE, android.provider.CalendarContract.Instances.BEGIN, android.provider.CalendarContract.Instances.END, android.provider.CalendarContract.Instances.ALL_DAY, android.provider.CalendarContract.Instances.DISPLAY_COLOR, android.provider.CalendarContract.Instances.EVENT_LOCATION, android.provider.CalendarContract.Instances.CALENDAR_ID), sel, args, "${android.provider.CalendarContract.Instances.BEGIN} ASC")?.use { k ->
+                buildList { while (k.moveToNext() && size < limit) add(Occurrence(k.getLong(0), k.getString(1)?.ifBlank { null } ?: "(No title)", k.getLong(2), k.getLong(3), k.getInt(4) == 1, k.getInt(5), k.getString(6) ?: "", k.getLong(7), false)) }
+            }.orEmpty()
+        }.getOrDefault(emptyList())
+
+        private fun target(c: Context, cfg: CountdownConfig, id: Int): Occurrence? {
+            if (ContextCompat.checkSelfPermission(c, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) return cached(c, id)
+            val now = System.currentTimeMillis(); val day = 86_400_000L
+            if (cfg.eventId == null) {
+                // Look a day ahead, then a week, a month, a year: fast on calendars with thousands of events.
+                for (span in listOf(day, 7 * day, 31 * day, 366 * day)) instances(c, now - day, now + span, null).filter { it.end > now }.minByOrNull { if (it.begin > now) it.begin else now }?.let { return it }
+                return null
+            }
+            // A chosen event: its next time (repeating events too), else the last time if it's over, else what we saved when you picked it.
+            for (span in listOf(366 * day, 5 * 366 * day, 20 * 366 * day)) instances(c, now - day, now + span, cfg.eventId, 5).firstOrNull { it.end > now }?.let { remember(c, id, it); return it }
+            instances(c, now - 20 * 366 * day, now, cfg.eventId, 500).lastOrNull()?.let { remember(c, id, it); return it }
+            return cached(c, id)
+        }
+
+        private fun remember(c: Context, id: Int, o: Occurrence) = c.getSharedPreferences("countdown-widgets", Context.MODE_PRIVATE).edit()
+            .putString("$id.cache", org.json.JSONObject().put("e", o.eventId).put("t", o.title).put("b", o.begin).put("n", o.end).put("a", o.allDay).put("c", o.color).put("l", o.location).toString()).apply()
+        private fun cached(c: Context, id: Int): Occurrence? = runCatching {
+            val j = org.json.JSONObject(c.getSharedPreferences("countdown-widgets", Context.MODE_PRIVATE).getString("$id.cache", null)!!)
+            Occurrence(j.getLong("e"), j.getString("t"), j.getLong("b"), j.getLong("n"), j.getBoolean("a"), j.getInt("c"), j.optString("l"), -1, false)
+        }.getOrNull()
+
+        /** Saves the event the widget should show, along with a copy of it. */
+        fun choose(c: Context, id: Int, cfg: CountdownConfig, picked: Occurrence?) { CountdownConfig.save(c, id, cfg); if (picked != null) remember(c, id, picked) }
+
+        /** Redraws widgets off the main thread (calendar queries can be slow on big synced calendars). */
+        fun updateAsync(c: Context, ids: IntArray, done: (() -> Unit)? = null) {
+            val app = c.applicationContext
+            Thread {
+                val mgr = AppWidgetManager.getInstance(app)
+                ids.forEach { id -> runCatching { mgr.updateAppWidget(id, build(app, id)) } }
+                done?.invoke()
+            }.start()
         }
 
         fun amount(ms: Long, style: String): String {
@@ -100,7 +132,7 @@ class CountdownWidget : AppWidgetProvider() {
             val cfg = CountdownConfig.load(c, id)
             val v = RemoteViews(c.packageName, R.layout.widget_countdown)
             val now = System.currentTimeMillis()
-            val next = runCatching { target(c, cfg) }.getOrNull()
+            val next = runCatching { target(c, cfg, id) }.getOrNull()
             v.setTextColor(R.id.w_big, cfg.color); v.setTextColor(R.id.w_chrono, cfg.color)
             if (next == null) {
                 v.setTextViewText(R.id.w_label, cfg.label.ifBlank { "COUNTDOWN" })
@@ -132,13 +164,13 @@ class CountdownWidget : AppWidgetProvider() {
         }
     }
 
-    override fun onUpdate(c: Context, mgr: AppWidgetManager, ids: IntArray) { ids.forEach { id -> runCatching { mgr.updateAppWidget(id, build(c, id)) } } }
+    override fun onUpdate(c: Context, mgr: AppWidgetManager, ids: IntArray) { val p = goAsync(); updateAsync(c, ids) { p.finish() } }
     override fun onDeleted(c: Context, ids: IntArray) { ids.forEach { CountdownConfig.delete(c, it) } }
     override fun onReceive(c: Context, intent: Intent) {
         if (intent.action == PINNED) {
             val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
             val ev = intent.getLongExtra("event", -1L)
-            if (id != AppWidgetManager.INVALID_APPWIDGET_ID && ev > 0) { CountdownConfig.save(c, id, CountdownConfig(eventId = ev, label = intent.getStringExtra("label").orEmpty())); refresh(c) }
+            if (id != AppWidgetManager.INVALID_APPWIDGET_ID && ev > 0) { CountdownConfig.save(c, id, CountdownConfig(eventId = ev, label = intent.getStringExtra("label").orEmpty())); val p = goAsync(); updateAsync(c, intArrayOf(id)) { p.finish() } }
             return
         }
         super.onReceive(c, intent)
@@ -156,15 +188,15 @@ class CountdownConfigActivity : WonderActivity() {
         if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) finish()
     }
 
-    @Composable override fun Content() = CountdownSetup(widgetId) { cfg ->
-        CountdownConfig.save(this, widgetId, cfg)
-        runCatching { AppWidgetManager.getInstance(this).updateAppWidget(widgetId, CountdownWidget.build(this, widgetId)) }
+    @Composable override fun Content() = CountdownSetup(widgetId) { cfg, picked ->
+        CountdownWidget.choose(this, widgetId, cfg, picked)
+        CountdownWidget.updateAsync(this, intArrayOf(widgetId))
         setResult(Activity.RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)); finish()
     }
 }
 
 @Composable
-private fun CountdownSetup(widgetId: Int, onDone: (CountdownConfig) -> Unit) {
+private fun CountdownSetup(widgetId: Int, onDone: (CountdownConfig, Occurrence?) -> Unit) {
     val context = LocalContext.current
     val p = wonderPalette()
     var cfg by remember { mutableStateOf(CountdownConfig.load(context, widgetId)) }
@@ -174,11 +206,11 @@ private fun CountdownSetup(widgetId: Int, onDone: (CountdownConfig) -> Unit) {
     LaunchedEffect(Unit) {
         val now = System.currentTimeMillis()
         events = if (!granted) emptyList() else withContext(Dispatchers.IO) {
-            runCatching { CalendarRepo(context).occurrences(now - 86_400_000L, now + 3 * 365L * 86_400_000L).filter { it.end > now }.distinctBy { it.eventId }.sortedBy { it.begin }.take(400) }.getOrDefault(emptyList())
+            runCatching { CalendarRepo(context).occurrences(now - 86_400_000L, now + 2 * 366L * 86_400_000L).asSequence().filter { it.end > now }.distinctBy { it.eventId }.take(400).toList() }.getOrDefault(emptyList())
         }
     }
     WonderApp(appName = "Chronicle", about = "Countdown widget", title = "Countdown widget", onBack = { (context as? Activity)?.finish() },
-        actions = { TextButton(onClick = { onDone(cfg) }) { Text("Done", color = p.toolbarText, fontWeight = FontWeight.SemiBold) } }) {
+        actions = { TextButton(onClick = { onDone(cfg, events.orEmpty().firstOrNull { it.eventId == cfg.eventId }) }) { Text("Done", color = p.toolbarText, fontWeight = FontWeight.SemiBold) } }) {
         val shown = events.orEmpty().filter { q.isBlank() || it.title.contains(q, true) }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
             item {
@@ -218,7 +250,7 @@ private fun CountdownSetup(widgetId: Int, onDone: (CountdownConfig) -> Unit) {
                     leading = { Box(Modifier.size(12.dp).clip(CircleShape).background(Color(o.color))) },
                     trailing = { RadioButton(cfg.eventId == o.eventId, { cfg = cfg.copy(eventId = o.eventId) }) }, onClick = { cfg = cfg.copy(eventId = o.eventId) })
             }
-            item { Spacer(Modifier.height(16.dp)); WButton("Save widget", { onDone(cfg) }, Modifier.fillMaxWidth(), icon = WonderIcons.Check, kind = ButtonKind.Primary) }
+            item { Spacer(Modifier.height(16.dp)); WButton("Save widget", { onDone(cfg, events.orEmpty().firstOrNull { it.eventId == cfg.eventId }) }, Modifier.fillMaxWidth(), icon = WonderIcons.Check, kind = ButtonKind.Primary) }
         }
     }
 }

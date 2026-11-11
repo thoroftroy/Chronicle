@@ -105,7 +105,10 @@ private fun RemoteViews.applyLookSafe(look: dev.wonderdesk.shared.WidgetLook, pr
 }
 
 class ChronicleWidget : AppWidgetProvider() {
-    override fun onUpdate(c: Context, mgr: AppWidgetManager, ids: IntArray) { ids.forEach { runCatching { mgr.updateAppWidget(it, build(c, it)) } } }
+    override fun onUpdate(c: Context, mgr: AppWidgetManager, ids: IntArray) {
+        val p = goAsync(); val app = c.applicationContext
+        Thread { try { ids.forEach { runCatching { mgr.updateAppWidget(it, build(app, it)) } } } finally { p.finish() } }.start()
+    }
     override fun onDeleted(c: Context, ids: IntArray) { ids.forEach { dev.wonderdesk.shared.WidgetPrefs(c, it).clear() } }
 
     override fun onReceive(c: Context, intent: Intent) {
@@ -121,9 +124,12 @@ class ChronicleWidget : AppWidgetProvider() {
 
         fun refresh(c: Context) {
             runCatching { CountdownWidget.refresh(c) }
-            val mgr = AppWidgetManager.getInstance(c)
-            val ids = mgr.getAppWidgetIds(ComponentName(c, ChronicleWidget::class.java))
-            if (ids.isNotEmpty()) ids.forEach { runCatching { mgr.updateAppWidget(it, build(c, it)) } }
+            val app = c.applicationContext
+            // Off the main thread: calendar queries must never make the app stutter.
+            Thread {
+                val mgr = AppWidgetManager.getInstance(app)
+                mgr.getAppWidgetIds(ComponentName(app, ChronicleWidget::class.java)).forEach { runCatching { mgr.updateAppWidget(it, build(app, it)) } }
+            }.start()
         }
 
         fun build(c: Context, id: Int = 0): RemoteViews {

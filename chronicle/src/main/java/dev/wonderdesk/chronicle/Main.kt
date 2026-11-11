@@ -38,6 +38,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -214,90 +215,166 @@ private fun rememberOccurrences(repo: CalendarRepo, from: Long, to: Long, rev: I
 
 /* ------------------------------------------------ month ------------------------------------------- */
 
+/** How the month looks: a full-height calendar, or the calendar with the chosen day's list under it (beside it in landscape). */
+object MonthPrefs {
+    var full by mutableStateOf(false)
+    var times by mutableStateOf(true)
+    fun load(c: Context) { val p = c.prefs("chronicle"); full = p.getBoolean("monthFull", false); times = p.getBoolean("monthTimes", true) }
+    fun save(c: Context) { c.prefs("chronicle").edit().putBoolean("monthFull", full).putBoolean("monthTimes", times).apply() }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: List<Task>, onSelect: (LocalDate) -> Unit, onOpenDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNew: () -> Unit) {
     val p = wonderPalette()
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { MonthPrefs.load(context) }
     val ym = YearMonth.from(selected)
     val firstDow = WeekFields.of(Locale.getDefault()).firstDayOfWeek
     val gridStart = ym.atDay(1).let { d -> d.minusDays(((d.dayOfWeek.value - firstDow.value + 7) % 7).toLong()) }
-    val cells = (0 until 42).map { gridStart.plusDays(it.toLong()) }
+    // Only the weeks this month touches (4 to 6), so every day gets as much room as possible.
+    val weeks = ((java.time.temporal.ChronoUnit.DAYS.between(gridStart, ym.atEndOfMonth()) / 7) + 1).toInt()
+    val cells = (0 until weeks * 7).map { gridStart.plusDays(it.toLong()) }
     val occ = rememberOccurrences(repo, cells.first().startMs(), cells.last().plusDays(1).startMs(), rev)
     val today = LocalDate.now()
     val now = rememberNow(60_000)
-    Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 8.dp).pointerInput(ym) {
-            var dx = 0f
-            detectHorizontalDragGestures(onDragEnd = { if (dx > 120) onSelect(selected.minusMonths(1)) else if (dx < -120) onSelect(selected.plusMonths(1)); dx = 0f }) { _, d -> dx += d }
-        }) {
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onSelect(selected.minusMonths(1)) }) { Icon(WonderIcons.NavigateBefore, "Previous month", tint = p.accent) }
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = { onSelect(selected.plusMonths(1)) }) { Icon(WonderIcons.NavigateNext, "Next month", tint = p.accent) }
-            }
-            Row(Modifier.fillMaxWidth()) {
-                (0 until 7).map { firstDow.plus(it.toLong()) }.forEach { d ->
-                    Text(d.getDisplayName(TextStyle.SHORT, Locale.getDefault()), Modifier.weight(1f), textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.labelMedium, color = if (d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY) p.secondaryText.copy(alpha = .7f) else p.secondaryText)
-                }
+    var sheet by remember { mutableStateOf(false) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val landscape = maxWidth > maxHeight
+        val showList = !MonthPrefs.full
+        val grid: @Composable (Modifier) -> Unit = { m ->
+            Column(m) {
+                MonthHeader(selected, firstDow, onSelect)
+                MonthGrid(cells, weeks, ym, selected, today, occ, tasks, Modifier.weight(1f).padding(horizontal = 6.dp).pointerInput(ym) {
+                    var dx = 0f
+                    detectHorizontalDragGestures(onDragEnd = { if (dx > 120) onSelect(selected.minusMonths(1)) else if (dx < -120) onSelect(selected.plusMonths(1)); dx = 0f }) { _, d -> dx += d }
+                }, onTap = { d -> if (d == selected) { if (showList) onOpenDay(d) else sheet = true } else { onSelect(d); if (!showList) sheet = true } }, onDouble = onOpenDay)
             }
         }
-        // Each day shows its events by name, like a wall calendar.
-        BoxWithConstraints(Modifier.fillMaxWidth().weight(.62f).padding(horizontal = 8.dp)) {
-            val rows = 6
-            val cellH = maxHeight / rows
-            Column(Modifier.fillMaxSize()) {
-                cells.chunked(7).forEach { week ->
-                    Row(Modifier.fillMaxWidth().height(cellH)) {
-                        week.forEach { d ->
-                            val inMonth = d.month == ym.month
-                            val isSel = d == selected
-                            val isToday = d == today
-                            val dayOcc = occ.filter { it.covers(d, zone) }.sortedWith(compareByDescending<Occurrence> { it.allDay }.thenBy { it.begin })
-                            val dayTasks = tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == d }
-                            val fit = ((cellH.value - 26) / 15).toInt().coerceIn(1, 5)
-                            Column(Modifier.weight(1f).fillMaxHeight().padding(1.dp).clip(RoundedCornerShape(6.dp))
-                                .background(when { isSel -> p.accent.copy(alpha = .14f); inMonth -> p.panel.copy(alpha = .55f); else -> Color.Transparent })
-                                .clickableWithDouble(d to isSel, onClick = { if (isSel) onOpenDay(d) else onSelect(d) }, onDouble = { onOpenDay(d) }).padding(2.dp)) {
-                                Box(Modifier.align(Alignment.CenterHorizontally).size(22.dp).clip(CircleShape).background(if (isToday) Color(0xFFE5483C) else Color.Transparent), contentAlignment = Alignment.Center) {
-                                    Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (isToday || isSel) FontWeight.Bold else FontWeight.Normal),
-                                        color = when { isToday -> Color.White; !inMonth -> p.secondaryText.copy(alpha = .45f); else -> p.text })
-                                }
-                                val shown = dayOcc.take(if (dayOcc.size + dayTasks.size > fit) fit - 1 else fit)
-                                shown.forEach { o ->
-                                    Text(o.title.ifBlank { "Event" }, Modifier.fillMaxWidth().padding(top = 1.dp).clip(RoundedCornerShape(3.dp))
-                                        .background(Color(o.color).copy(alpha = if (o.allDay) .85f else .22f)).padding(horizontal = 2.dp),
-                                        color = if (o.allDay) Color.White else p.text, fontSize = 10.sp, lineHeight = 12.sp, letterSpacing = (-0.2).sp,
-                                        maxLines = if (shown.size == 1 && dayTasks.isEmpty()) 2 else 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                if (shown.size < fit) dayTasks.take(fit - shown.size).forEach { t ->
-                                    Text("☐ " + t.title.ifBlank { "Task" }, Modifier.fillMaxWidth().padding(top = 1.dp), color = p.success, fontSize = 10.sp, lineHeight = 12.sp, letterSpacing = (-0.2).sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                val more = dayOcc.size + dayTasks.size - shown.size - (if (shown.size < fit) dayTasks.take(fit - shown.size).size else 0)
-                                if (more > 0) Text("+$more more", color = p.secondaryText, fontSize = 9.sp, lineHeight = 11.sp, maxLines = 1)
+        when {
+            !showList -> grid(Modifier.fillMaxSize())
+            landscape -> Row(Modifier.fillMaxSize()) {
+                grid(Modifier.weight(.6f).fillMaxHeight())
+                DayList(selected, today, now, occ, tasks, onOpenDay, onOpen, onNew, Modifier.weight(.4f).fillMaxHeight())
+            }
+            else -> Column(Modifier.fillMaxSize()) {
+                grid(Modifier.weight(.7f).fillMaxWidth())
+                DayList(selected, today, now, occ, tasks, onOpenDay, onOpen, onNew, Modifier.weight(.3f).fillMaxWidth())
+            }
+        }
+    }
+    if (sheet) ModalBottomSheet(onDismissRequest = { sheet = false }, containerColor = p.window) {
+        DayList(selected, today, now, occ, tasks, { sheet = false; onOpenDay(it) }, { sheet = false; onOpen(it) }, { sheet = false; onNew() }, Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 520.dp))
+    }
+}
+
+@Composable
+private fun MonthHeader(selected: LocalDate, firstDow: DayOfWeek, onSelect: (LocalDate) -> Unit) {
+    val p = wonderPalette()
+    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { onSelect(selected.minusMonths(1)) }) { Icon(WonderIcons.NavigateBefore, "Previous month", tint = p.accent) }
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = { onSelect(selected.plusMonths(1)) }) { Icon(WonderIcons.NavigateNext, "Next month", tint = p.accent) }
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp)) {
+        (0 until 7).map { firstDow.plus(it.toLong()) }.forEach { d ->
+            Text(d.getDisplayName(TextStyle.SHORT, Locale.getDefault()), Modifier.weight(1f), textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = if (d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY) p.secondaryText.copy(alpha = .7f) else p.secondaryText)
+        }
+    }
+}
+
+@Composable
+private fun MonthGrid(cells: List<LocalDate>, weeks: Int, ym: YearMonth, selected: LocalDate, today: LocalDate, occ: List<Occurrence>, tasks: List<Task>, modifier: Modifier, onTap: (LocalDate) -> Unit, onDouble: (LocalDate) -> Unit) {
+    val p = wonderPalette()
+    val density = LocalDensity.current
+    val lineDp = with(density) { 15.sp.toDp() }
+    BoxWithConstraints(modifier) {
+        val cellH = maxHeight / weeks
+        val roomy = maxWidth / 7 >= 84.dp
+        Column(Modifier.fillMaxSize()) {
+            cells.chunked(7).forEach { week ->
+                Row(Modifier.fillMaxWidth().height(cellH)) {
+                    week.forEach { d ->
+                        val inMonth = d.month == ym.month
+                        val isSel = d == selected
+                        val isToday = d == today
+                        val dayOcc = remember(occ, d) { occ.filter { it.covers(d, zone) }.sortedWith(compareByDescending<Occurrence> { it.allDay }.thenBy { it.begin }) }
+                        val dayTasks = remember(tasks.toList(), d) { tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == d } }
+                        val fit = ((cellH - 26.dp) / (lineDp + 2.dp)).toInt().coerceIn(1, 8)
+                        val total = dayOcc.size + dayTasks.size
+                        val room = if (total > fit) fit - 1 else fit
+                        Column(Modifier.weight(1f).fillMaxHeight().padding(1.5.dp).clip(RoundedCornerShape(7.dp))
+                            .background(when { isSel -> p.accent.copy(alpha = .16f); inMonth -> p.panel.copy(alpha = .6f); else -> p.panel.copy(alpha = .18f) })
+                            .then(if (isSel) Modifier.border(1.5.dp, p.accent.copy(alpha = .6f), RoundedCornerShape(7.dp)) else Modifier)
+                            .clickableWithDouble(d to isSel, onClick = { onTap(d) }, onDouble = { onDouble(d) }).padding(horizontal = 2.dp, vertical = 2.dp)) {
+                            Box(Modifier.align(Alignment.CenterHorizontally).size(22.dp).clip(CircleShape).background(if (isToday) Color(0xFFE5483C) else Color.Transparent), contentAlignment = Alignment.Center) {
+                                Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (isToday || isSel) FontWeight.Bold else FontWeight.Medium),
+                                    color = when { isToday -> Color.White; !inMonth -> p.secondaryText.copy(alpha = .45f); else -> p.text })
                             }
+                            var used = 0
+                            for (o in dayOcc) {
+                                if (used >= room) break
+                                EventChip(o, d, alpha = if (inMonth) 1f else .55f, times = roomy && MonthPrefs.times); used++
+                            }
+                            for (t in dayTasks) {
+                                if (used >= room) break
+                                Text("☐ " + t.title.ifBlank { "Task" }, Modifier.fillMaxWidth().padding(top = 2.dp), color = p.success, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false); used++
+                            }
+                            if (total > used) Text("+${total - used}", Modifier.fillMaxWidth().padding(top = 1.dp), color = p.secondaryText, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
             }
         }
-        val dayOcc = occ.filter { it.covers(selected, zone) }
-        val dayTasks = tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == selected }
-        LazyColumn(Modifier.fillMaxWidth().weight(.38f), contentPadding = PaddingValues(16.dp, 6.dp, 16.dp, 16.dp)) {
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp)) {
-                    SectionLabel(when (selected) { today -> "Today"; today.plusDays(1) -> "Tomorrow"; today.minusDays(1) -> "Yesterday"; else -> selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM")) }, Modifier.weight(1f))
-                    Text(daysAwayText(selected, today), style = MaterialTheme.typography.labelMedium, color = p.secondaryText)
-                    TextButton(onClick = { onOpenDay(selected) }) { Text("Open day") }
-                    TextButton(onClick = onNew) { Text("Add") }
-                }
-            }
-            if (dayOcc.isEmpty() && dayTasks.isEmpty()) item {
-                Panel { ListRow("Nothing planned", subtitle = "Tap to add an event. Tap the date again to open its timeline.", icon = WonderIcons.EventNote, tint = Color(0xFF7A7F87), onClick = onNew) }
-            }
-            itemsIndexed(dayOcc) { i, o -> OccurrenceRow(o, now, Modifier.panelItem(i, dayOcc.size + dayTasks.size)) { onOpen(o) } }
-            itemsIndexed(dayTasks) { i, t -> ListRow(t.title.ifBlank { "Untitled task" }, Modifier.panelItem(dayOcc.size + i, dayOcc.size + dayTasks.size), subtitle = "Task due",
-                icon = WonderIcons.CheckCircle, tint = p.success) }
+    }
+}
+
+/** One event in a month cell: solid for all-day, a coloured bar for timed events (with the time if there's room). */
+@Composable
+private fun EventChip(o: Occurrence, day: LocalDate, alpha: Float, times: Boolean) {
+    val p = wonderPalette()
+    val c = Color(o.color)
+    val title = o.title.ifBlank { "Event" }
+    if (o.allDay) {
+        Text(title, Modifier.fillMaxWidth().padding(top = 2.dp).clip(RoundedCornerShape(4.dp)).background(c.copy(alpha = .9f * alpha)).padding(horizontal = 3.dp),
+            color = Color.White, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+    } else {
+        val startsToday = Instant.ofEpochMilli(o.begin).atZone(zone).toLocalDate() == day
+        val time = if (times && startsToday) java.time.format.DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(LocalContext.current)) "H:mm" else "h:mma")
+            .format(Instant.ofEpochMilli(o.begin).atZone(zone)).lowercase().replace(":00", "").removeSuffix("m") + " " else ""
+        Row(Modifier.fillMaxWidth().padding(top = 2.dp).clip(RoundedCornerShape(4.dp)).background(c.copy(alpha = .18f * alpha)).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+            Box(Modifier.width(3.dp).fillMaxHeight().background(c.copy(alpha = alpha)))
+            Text(androidx.compose.ui.text.buildAnnotatedString {
+                if (time.isNotEmpty()) withStyle(androidx.compose.ui.text.SpanStyle(color = p.secondaryText, fontWeight = FontWeight.Normal)) { append(time) }
+                append(title)
+            }, Modifier.padding(start = 2.dp, end = 1.dp), color = p.text.copy(alpha = alpha), fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
         }
+    }
+}
+
+@Composable
+private fun DayList(selected: LocalDate, today: LocalDate, now: Long, occ: List<Occurrence>, tasks: List<Task>, onOpenDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNew: () -> Unit, modifier: Modifier) {
+    val p = wonderPalette()
+    val dayOcc = occ.filter { it.covers(selected, zone) }.sortedWith(compareByDescending<Occurrence> { it.allDay }.thenBy { it.begin })
+    val dayTasks = tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == selected }
+    LazyColumn(modifier, contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 16.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)) {
+                Column(Modifier.weight(1f)) {
+                    SectionLabel(when (selected) { today -> "Today"; today.plusDays(1) -> "Tomorrow"; today.minusDays(1) -> "Yesterday"; else -> selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM")) })
+                    daysAwayText(selected, today).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = p.secondaryText) }
+                }
+                TextButton(onClick = { onOpenDay(selected) }) { Text("Open day") }
+                TextButton(onClick = onNew) { Text("Add") }
+            }
+        }
+        if (dayOcc.isEmpty() && dayTasks.isEmpty()) item {
+            Panel { ListRow("Nothing planned", subtitle = "Tap Add for an event. Tap the date again to open its timeline.", icon = WonderIcons.EventNote, tint = Color(0xFF7A7F87), onClick = onNew) }
+        }
+        itemsIndexed(dayOcc, key = { i, o -> "o${o.eventId}-${o.begin}-$i" }) { i, o -> OccurrenceRow(o, now, Modifier.panelItem(i, dayOcc.size + dayTasks.size)) { onOpen(o) } }
+        itemsIndexed(dayTasks, key = { i, t -> "t${t.id}-$i" }) { i, t -> ListRow(t.title.ifBlank { "Untitled task" }, Modifier.panelItem(dayOcc.size + i, dayOcc.size + dayTasks.size), subtitle = "Task due",
+            icon = WonderIcons.CheckCircle, tint = p.success) }
     }
 }
 
@@ -424,7 +501,7 @@ private fun AgendaView(repo: CalendarRepo, from: LocalDate, rev: Int, searching:
                         Text(d.format(DateTimeFormatter.ofPattern("EEEE, MMMM yyyy")), style = MaterialTheme.typography.labelLarge, color = p.secondaryText, modifier = Modifier.padding(bottom = 4.dp))
                     }
                 }
-                itemsIndexed(list, key = { _, o -> "${o.eventId}-${o.begin}" }) { i, o -> OccurrenceRow(o, now, Modifier.panelItem(i, list.size)) { onOpen(o) } }
+                itemsIndexed(list, key = { j, o -> "$d-${o.eventId}-${o.begin}-$j" }) { i, o -> OccurrenceRow(o, now, Modifier.panelItem(i, list.size)) { onOpen(o) } }
             }
         }
     }
@@ -564,6 +641,7 @@ private fun EventEditor(initial: EventDraft, repo: CalendarRepo, onClose: () -> 
     val cals = remember { repo.calendars().filter { it.writable } }
     var pick by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val toastRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val scope = rememberCoroutineScope()
     val startDt = if (d.allDay) Instant.ofEpochMilli(d.start).atZone(ZoneOffset.UTC).toLocalDateTime() else LocalDateTime.ofInstant(Instant.ofEpochMilli(d.start), zone)
     val endDt = if (d.allDay) Instant.ofEpochMilli(d.end - 1).atZone(ZoneOffset.UTC).toLocalDateTime() else LocalDateTime.ofInstant(Instant.ofEpochMilli(d.end), zone)
@@ -583,10 +661,16 @@ private fun EventEditor(initial: EventDraft, repo: CalendarRepo, onClose: () -> 
                 f.writeText(Ics.export(listOf(d)))
                 context.share(androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", f), "text/calendar") {}
             },
+            WonderMenuItem("Countdown on home screen", WonderIcons.Timer) { if (!CountdownWidget.pin(context, d.id!!, d.title)) toastRef.value("Your home screen doesn't support adding widgets from apps. Add the Chronicle countdown widget, then pick this event") },
             WonderMenuItem("Delete event", WonderIcons.Delete, danger = true) { confirmDelete = true },
         ) else emptyList()
     ) {
+        toastRef.value = LocalToast.current
         Page {
+            if (initial.id != null) Panel {
+                ListRow("Count down to this on your home screen", subtitle = "Adds a countdown widget for “${d.title.ifBlank { "this event" }}”", icon = WonderIcons.Timer, tint = Color(0xFFE5483C), chevron = true,
+                    onClick = { if (!CountdownWidget.pin(context, d.id!!, d.title)) toastRef.value("Your home screen doesn't support adding widgets from apps. Add the Chronicle countdown widget, then pick this event") })
+            }
             Panel {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Field(d.title, { d = d.copy(title = it) }, "Title")
@@ -746,6 +830,7 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
     val prefs = remember { context.prefs("chronicle") }
     var reminders by remember { mutableStateOf(prefs.getBoolean("reminders", true)) }
     var cals by remember { mutableStateOf(if (granted) repo.calendars() else emptyList()) }
+    LaunchedEffect(Unit) { MonthPrefs.load(context) }
     if (granted) Panel(title = "Calendars", footer = "Calendars come from the accounts on this phone. To add Google Calendar, add your Google account in Android settings; Chronicle syncs through it.") {
         if (cals.isEmpty()) ListRow("No calendars yet", subtitle = "Events you create are saved on this phone")
         cals.forEachIndexed { i, c ->
@@ -756,6 +841,12 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
         ListRow("Add an account", icon = WonderIcons.Person, tint = Color(0xFF1E7FE8), chevron = true, onClick = {
             context.launchSafely(Intent(android.provider.Settings.ACTION_ADD_ACCOUNT).putExtra(android.provider.Settings.EXTRA_ACCOUNT_TYPES, arrayOf("com.google"))) {}
         })
+    }
+    Panel(title = "Month view") {
+        SwitchRow("Calendar fills the screen", MonthPrefs.full, { MonthPrefs.full = it; MonthPrefs.save(context) },
+            subtitle = "Bigger days with more events. Tap a day to see its list", icon = WonderIcons.CalendarMonth, tint = Color(0xFF1E7FE8))
+        PanelDivider()
+        SwitchRow("Show start times", MonthPrefs.times, { MonthPrefs.times = it; MonthPrefs.save(context) }, subtitle = "Like “9 Dentist”, when the days are wide enough (tablets, landscape)", icon = WonderIcons.Schedule, tint = Color(0xFF16A085))
     }
     Panel(title = "Notifications") {
         SwitchRow("Event reminders", reminders, { reminders = it; prefs.edit().putBoolean("reminders", it).apply() },

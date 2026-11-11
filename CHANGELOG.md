@@ -1,5 +1,18 @@
 # Chronicle changelog
 
+## v0.5.0
+
+- Month view redesigned: only the weeks the month needs, so each day is much taller; events are clear coloured chips that fit more per day; selected day is outlined
+- New option: let the calendar fill the screen and tap a day to see its events in a sheet. Start times can show in the month when days are wide enough
+- In landscape the month and the day's list sit side by side
+- Countdown widget now counts down to the event you choose (a wedding, a trip) or whatever's next, with your own label, colour and style (days, weeks, days + hours). After the event it counts the days since
+- New “Count down to this on your home screen” button on every event
+- Up next widget settings: how far ahead to look, whether to include tasks, and the background
+- Fixed a crash in Agenda with events that span several days
+- Works properly in landscape: tabs move to a rail at the side so the content keeps its height, and screens that ran out of room now scroll
+- If the app ever crashes it says so next time it opens and offers to send a report (only the error, app version and phone model, with file names and links removed). Turn on automatic sending in Control Room › Wonderdesk
+- Lists can no longer crash when two items share a name
+
 ## v0.4.0
 
 - Tapping a date no longer jumps back to today

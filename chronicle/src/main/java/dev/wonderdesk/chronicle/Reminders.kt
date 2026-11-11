@@ -20,6 +20,11 @@ import java.text.DateFormat
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Date
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
+import dev.wonderdesk.shared.applyLook
 
 object Notify {
     const val EVENTS = "chronicle-events"
@@ -95,8 +100,13 @@ class ChronicleBootReceiver : BroadcastReceiver() {
 }
 
 /** Home-screen widget: today's date, then the next events and tasks with countdowns. */
+private fun RemoteViews.applyLookSafe(look: dev.wonderdesk.shared.WidgetLook, primary: List<Int>, secondary: List<Int>) = runCatching {
+    applyLook(look, R.id.w_root, Triple(R.drawable.wd_widget_bg, R.drawable.wd_widget_bg_dark, R.drawable.wd_widget_bg_clear), primary, secondary)
+}
+
 class ChronicleWidget : AppWidgetProvider() {
-    override fun onUpdate(c: Context, mgr: AppWidgetManager, ids: IntArray) { ids.forEach { mgr.updateAppWidget(it, build(c)) } }
+    override fun onUpdate(c: Context, mgr: AppWidgetManager, ids: IntArray) { ids.forEach { runCatching { mgr.updateAppWidget(it, build(c, it)) } } }
+    override fun onDeleted(c: Context, ids: IntArray) { ids.forEach { dev.wonderdesk.shared.WidgetPrefs(c, it).clear() } }
 
     override fun onReceive(c: Context, intent: Intent) {
         super.onReceive(c, intent)
@@ -113,11 +123,15 @@ class ChronicleWidget : AppWidgetProvider() {
             runCatching { CountdownWidget.refresh(c) }
             val mgr = AppWidgetManager.getInstance(c)
             val ids = mgr.getAppWidgetIds(ComponentName(c, ChronicleWidget::class.java))
-            if (ids.isNotEmpty()) ids.forEach { mgr.updateAppWidget(it, build(c)) }
+            if (ids.isNotEmpty()) ids.forEach { runCatching { mgr.updateAppWidget(it, build(c, it)) } }
         }
 
-        fun build(c: Context): RemoteViews {
+        fun build(c: Context, id: Int = 0): RemoteViews {
+            val s = dev.wonderdesk.shared.WidgetPrefs(c, id)
+            val days = s.int("days", 14); val withTasks = s.bool("tasks", true)
             val v = RemoteViews(c.packageName, R.layout.widget_upcoming)
+            val look = runCatching { dev.wonderdesk.shared.WidgetLook.valueOf(s.str("look", "GLASS")) }.getOrDefault(dev.wonderdesk.shared.WidgetLook.GLASS)
+            v.applyLookSafe(look, TITLES + R.id.w_month, TIMES + R.id.w_empty)
             val today = LocalDate.now()
             v.setTextViewText(R.id.w_day, today.dayOfMonth.toString())
             v.setTextViewText(R.id.w_month, today.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM")))
@@ -125,14 +139,14 @@ class ChronicleWidget : AppWidgetProvider() {
             data class Item(val title: String, val sub: String, val color: Int, val at: Long)
             val items = mutableListOf<Item>()
             if (ContextCompat.checkSelfPermission(c, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
-                CalendarRepo(c).occurrences(now, now + 14 * 86_400_000L).filter { it.end > now }.take(5).forEach { o ->
+                CalendarRepo(c).occurrences(now, now + days * 86_400_000L).filter { it.end > now }.take(5).forEach { o ->
                     val time = if (o.allDay) "All day" else DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(o.begin))
                     val d = o.startsOn(ZoneId.systemDefault())
                     val dayText = when (d) { today -> "Today"; today.plusDays(1) -> "Tomorrow"; else -> d.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM")) }
                     items += Item(o.title, "$dayText $time · ${countdown(now, o.begin, o.end)}", o.color, o.begin)
                 }
             }
-            TaskStore(c).all().filter { !it.done && it.due > 0 }.sortedBy { it.due }.take(3).forEach { t ->
+            if (withTasks) TaskStore(c).all().filter { !it.done && it.due > 0 }.sortedBy { it.due }.take(3).forEach { t ->
                 items += Item("☐ " + t.title, "Task due " + LocalDate.ofEpochDay(t.due / 86_400_000L).format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM")), 0xFF2E9E44.toInt(), t.due)
             }
             val shown = items.sortedBy { it.at }.take(5)
@@ -146,6 +160,31 @@ class ChronicleWidget : AppWidgetProvider() {
             v.setOnClickPendingIntent(R.id.w_add, PendingIntent.getActivity(c, 10, Intent(c, MainActivity::class.java).putExtra("new", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             return v
+        }
+    }
+}
+
+
+class UpcomingWidgetSetup : dev.wonderdesk.shared.WidgetSetupActivity() {
+    override fun redraw() { AppWidgetManager.getInstance(this).updateAppWidget(widgetId, ChronicleWidget.build(this, widgetId)) }
+    @androidx.compose.runtime.Composable override fun Content() {
+        val c = androidx.compose.ui.platform.LocalContext.current
+        val s = androidx.compose.runtime.remember { dev.wonderdesk.shared.WidgetPrefs(c, widgetId) }
+        var look by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(runCatching { dev.wonderdesk.shared.WidgetLook.valueOf(s.str("look", "GLASS")) }.getOrDefault(dev.wonderdesk.shared.WidgetLook.GLASS)) }
+        var days by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(s.int("days", 14)) }
+        var tasks by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(s.bool("tasks", true)) }
+        dev.wonderdesk.shared.WidgetSetup("Chronicle", "Up next widget", onCancel = { finish() }, onSave = { s.put("look" to look.name, "days" to days, "tasks" to tasks); save() }) {
+            dev.wonderdesk.shared.Panel(title = "Shows") {
+                androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(12.dp)) {
+                    androidx.compose.material3.Text("Look ahead", style = androidx.compose.material3.MaterialTheme.typography.labelLarge)
+                    androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp), modifier = androidx.compose.ui.Modifier.padding(top = 6.dp)) {
+                        listOf(1 to "Today", 7 to "A week", 14 to "2 weeks", 31 to "A month", 365 to "A year").forEach { (d, n) -> dev.wonderdesk.shared.Chip(n, days == d, { days = d }) }
+                    }
+                }
+                dev.wonderdesk.shared.PanelDivider()
+                dev.wonderdesk.shared.SwitchRow("Include tasks", tasks, { tasks = it })
+            }
+            dev.wonderdesk.shared.WidgetLookPicker(look) { look = it }
         }
     }
 }

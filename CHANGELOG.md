@@ -1,5 +1,16 @@
 # Chronicle changelog
 
+## v0.5.2
+
+- The day view now swipes smoothly between days too, keeping the timeline at the same hour
+- Tasks glide into place when you add, finish or reorder them
+- Smoother everywhere: new screens, tabs and Settings ease in instead of snapping, and buttons, tabs, chips and switches give a light tap you can feel (following your phone's touch-feedback setting)
+- Android's predictive back: the back gesture shows a live preview of where you're going
+- Swiping between months is smooth: the next month slides in under your finger and snaps into place, and the arrows animate the same way
+- Countdown widget fits any size, down to a 1×1 square with a big number and the event name
+- Up next widget shrinks cleanly to small sizes
+- Super look: tap sparkles now match Bliss Player: soft glowing sparks with trails, drifting rainbow colours and a faint aurora, instead of big solid circles
+
 ## v0.5.1
 
 - Fixed the countdown widget saying “Nothing coming up”: it now reads just the event you picked (or looks ahead a day, a week, a month, a year), works on big synced calendars, and remembers your event even if the calendar is briefly unavailable

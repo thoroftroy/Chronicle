@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/w_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@drawable/wd_widget_bg" android:padding="6dp" android:gravity="center">
+    <TextView android:id="@+id/w_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone" />
+    <TextView android:id="@+id/w_big" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center" android:textStyle="bold" android:textColor="#FFE5483C" android:maxLines="1"
+        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="40sp" android:autoSizeStepGranularity="1sp" />
+    <Chronometer android:id="@+id/w_chrono" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center" android:textStyle="bold" android:textColor="#FFE5483C" android:maxLines="1" android:visibility="gone"
+        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="30sp" android:autoSizeStepGranularity="1sp" />
+    <TextView android:id="@+id/w_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textSize="11sp" android:textStyle="bold" android:textColor="#FF1B1D21" android:maxLines="1" android:ellipsize="end" />
+    <TextView android:id="@+id/w_when" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone" />
+</LinearLayout>

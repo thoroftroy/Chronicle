@@ -132,10 +132,11 @@ class ChronicleWidget : AppWidgetProvider() {
             }.start()
         }
 
-        fun build(c: Context, id: Int = 0): RemoteViews {
+        fun build(c: Context, id: Int = 0): RemoteViews = dev.wonderdesk.shared.responsiveWidget(R.layout.widget_upcoming_small, null, R.layout.widget_upcoming) { fill(c, id, it) }
+        private fun fill(c: Context, id: Int, layout: Int): RemoteViews {
             val s = dev.wonderdesk.shared.WidgetPrefs(c, id)
             val days = s.int("days", 14); val withTasks = s.bool("tasks", true)
-            val v = RemoteViews(c.packageName, R.layout.widget_upcoming)
+            val v = RemoteViews(c.packageName, layout)
             val look = runCatching { dev.wonderdesk.shared.WidgetLook.valueOf(s.str("look", "GLASS")) }.getOrDefault(dev.wonderdesk.shared.WidgetLook.GLASS)
             v.applyLookSafe(look, TITLES + R.id.w_month, TIMES + R.id.w_empty)
             val today = LocalDate.now()
@@ -165,6 +166,7 @@ class ChronicleWidget : AppWidgetProvider() {
             v.setOnClickPendingIntent(R.id.w_root, Notify.openApp(c, 9))
             v.setOnClickPendingIntent(R.id.w_add, PendingIntent.getActivity(c, 10, Intent(c, MainActivity::class.java).putExtra("new", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            if (layout != R.layout.widget_upcoming) ROWS.drop(2).forEach { v.setViewVisibility(it, android.view.View.GONE) }
             return v
         }
     }

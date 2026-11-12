@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package dev.wonderdesk.chronicle
 
 import android.Manifest
@@ -223,7 +224,7 @@ object MonthPrefs {
     fun save(c: Context) { c.prefs("chronicle").edit().putBoolean("monthFull", full).putBoolean("monthTimes", times).apply() }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: List<Task>, onSelect: (LocalDate) -> Unit, onOpenDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNew: () -> Unit) {
     val p = wonderPalette()
@@ -242,13 +243,28 @@ private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
         val showList = !MonthPrefs.full
+        // Months live on a pager: they slide under your finger with momentum, and nearby months are ready before you get there.
+        val base = remember { YearMonth.now() }
+        fun pageOf(m: YearMonth) = 1200 + ((m.year - base.year) * 12 + (m.monthValue - base.monthValue))
+        val pager = androidx.compose.foundation.pager.rememberPagerState(pageOf(ym)) { 2400 }
+        val scope = rememberCoroutineScope()
+        LaunchedEffect(ym) { if (pager.currentPage != pageOf(ym) && !pager.isScrollInProgress) pager.animateScrollToPage(pageOf(ym)) }
+        LaunchedEffect(pager.settledPage) {
+            val m = base.plusMonths((pager.settledPage - 1200).toLong())
+            if (m != ym) onSelect(if (m == YearMonth.from(today)) today else m.atDay(selected.dayOfMonth.coerceAtMost(m.lengthOfMonth())))
+        }
         val grid: @Composable (Modifier) -> Unit = { m ->
             Column(m) {
-                MonthHeader(selected, firstDow, onSelect)
-                MonthGrid(cells, weeks, ym, selected, today, occ, tasks, Modifier.weight(1f).padding(horizontal = 6.dp).pointerInput(ym) {
-                    var dx = 0f
-                    detectHorizontalDragGestures(onDragEnd = { if (dx > 120) onSelect(selected.minusMonths(1)) else if (dx < -120) onSelect(selected.plusMonths(1)); dx = 0f }) { _, d -> dx += d }
-                }, onTap = { d -> if (d == selected) { if (showList) onOpenDay(d) else sheet = true } else { onSelect(d); if (!showList) sheet = true } }, onDouble = onOpenDay)
+                MonthHeader(selected, firstDow, onSelect = { d -> val t = pageOf(YearMonth.from(d)); scope.launch { pager.animateScrollToPage(t) } })
+                androidx.compose.foundation.pager.HorizontalPager(pager, Modifier.weight(1f), beyondBoundsPageCount = 1, key = { it }) { page ->
+                    val pm = base.plusMonths((page - 1200).toLong())
+                    val pStart = pm.atDay(1).let { d -> d.minusDays(((d.dayOfWeek.value - firstDow.value + 7) % 7).toLong()) }
+                    val pWeeks = ((java.time.temporal.ChronoUnit.DAYS.between(pStart, pm.atEndOfMonth()) / 7) + 1).toInt()
+                    val pCells = remember(pm) { (0 until pWeeks * 7).map { pStart.plusDays(it.toLong()) } }
+                    val pOcc = if (pm == ym) occ else rememberOccurrences(repo, pCells.first().startMs(), pCells.last().plusDays(1).startMs(), rev)
+                    MonthGrid(pCells, pWeeks, pm, selected, today, pOcc, tasks, Modifier.fillMaxSize().padding(horizontal = 6.dp),
+                        onTap = { d -> if (d == selected) { if (showList) onOpenDay(d) else sheet = true } else { onSelect(d); if (!showList) sheet = true } }, onDouble = onOpenDay)
+                }
             }
         }
         when {
@@ -405,40 +421,58 @@ private fun OccurrenceRow(o: Occurrence, now: Long, modifier: Modifier, onClick:
 
 /* -------------------------------------------------- day ------------------------------------------- */
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DayView(repo: CalendarRepo, day: LocalDate, rev: Int, onDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNewAt: (LocalTime) -> Unit) {
     val p = wonderPalette()
-    val occ = rememberOccurrences(repo, day.startMs(), day.plusDays(1).startMs(), rev)
-    val allDay = occ.filter { it.allDay || (it.begin < day.startMs() && it.end > day.plusDays(1).startMs()) }
-    val timed = occ - allDay.toSet()
     val hour = 56.dp
-    val scroll = rememberScrollState()
     val density = LocalDensity.current
-    LaunchedEffect(day) { scroll.scrollTo(with(density) { (hour * (if (day == LocalDate.now()) (LocalTime.now().hour - 1).coerceAtLeast(0) else 7)).roundToPx() }) }
+    // Days live on a pager, so they slide under your finger; every day opens scrolled to the same hour.
+    val base = remember { LocalDate.now() }
+    fun pageOf(d: LocalDate) = 20_000 + java.time.temporal.ChronoUnit.DAYS.between(base, d).toInt()
+    val pager = androidx.compose.foundation.pager.rememberPagerState(pageOf(day)) { 40_000 }
+    val scope = rememberCoroutineScope()
+    val sharedScroll = remember { mutableIntStateOf(with(density) { (hour * (if (day == LocalDate.now()) (LocalTime.now().hour - 1).coerceAtLeast(0) else 7)).roundToPx() }) }
+    LaunchedEffect(day) { if (pager.currentPage != pageOf(day) && !pager.isScrollInProgress) pager.animateScrollToPage(pageOf(day)) }
+    LaunchedEffect(pager.settledPage) { val d = base.plusDays((pager.settledPage - 20_000).toLong()); if (d != day) onDay(d) }
+    fun go(d: LocalDate) { scope.launch { pager.animateScrollToPage(pageOf(d)) } }
     Column(Modifier.fillMaxSize()) {
         // week strip
         val weekStart = day.minusDays(((day.dayOfWeek.value - WeekFields.of(Locale.getDefault()).firstDayOfWeek.value + 7) % 7).toLong())
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onDay(day.minusWeeks(1)) }) { Icon(WonderIcons.NavigateBefore, "Previous week", tint = p.accent) }
+            IconButton(onClick = { go(day.minusWeeks(1)) }) { Icon(WonderIcons.NavigateBefore, "Previous week", tint = p.accent) }
             (0 until 7).map { weekStart.plusDays(it.toLong()) }.forEach { d ->
                 val on = d == day; val today = d == LocalDate.now()
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (on) p.accent else Color.Transparent).clickable { onDay(d) }.padding(vertical = 6.dp),
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (on) p.accent else Color.Transparent).clickable { go(d) }.padding(vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(d.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()), style = MaterialTheme.typography.labelSmall, color = if (on) p.onAccent else p.secondaryText)
                     Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (today) FontWeight.Bold else FontWeight.Normal),
                         color = if (on) p.onAccent else if (today) Color(0xFFE5483C) else p.text)
                 }
             }
-            IconButton(onClick = { onDay(day.plusWeeks(1)) }) { Icon(WonderIcons.NavigateNext, "Next week", tint = p.accent) }
+            IconButton(onClick = { go(day.plusWeeks(1)) }) { Icon(WonderIcons.NavigateNext, "Next week", tint = p.accent) }
         }
+        androidx.compose.foundation.pager.HorizontalPager(pager, Modifier.fillMaxSize(), beyondBoundsPageCount = 1, key = { it }) { page ->
+            DayPage(repo, base.plusDays((page - 20_000).toLong()), rev, hour, sharedScroll, onOpen, onNewAt)
+        }
+    }
+}
+
+@Composable
+private fun DayPage(repo: CalendarRepo, day: LocalDate, rev: Int, hour: androidx.compose.ui.unit.Dp, sharedScroll: MutableIntState, onOpen: (Occurrence) -> Unit, onNewAt: (LocalTime) -> Unit) {
+    val p = wonderPalette()
+    val occ = rememberOccurrences(repo, day.startMs(), day.plusDays(1).startMs(), rev)
+    val allDay = occ.filter { it.allDay || (it.begin < day.startMs() && it.end > day.plusDays(1).startMs()) }
+    val timed = occ - allDay.toSet()
+    val scroll = rememberScrollState(sharedScroll.intValue)
+    LaunchedEffect(scroll.value) { sharedScroll.intValue = scroll.value }
+    val now = rememberNow(60_000)
+    Column(Modifier.fillMaxSize()) {
         if (allDay.isNotEmpty()) Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             allDay.forEach { o -> Text(o.title, Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Color(o.color).copy(alpha = .85f)).clickable { onOpen(o) }.padding(8.dp, 4.dp),
                 color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
         }
-        Box(Modifier.fillMaxSize().verticalScroll(scroll).pointerInput(day) {
-            var dx = 0f
-            detectHorizontalDragGestures(onDragEnd = { if (dx > 120) onDay(day.minusDays(1)) else if (dx < -120) onDay(day.plusDays(1)); dx = 0f }) { _, d -> dx += d }
-        }) {
+        Box(Modifier.fillMaxSize().verticalScroll(scroll)) {
             Column {
                 (0 until 24).forEach { h ->
                     Row(Modifier.fillMaxWidth().height(hour).clickable { onNewAt(LocalTime.of(h, 0)) }) {
@@ -466,7 +500,7 @@ private fun DayView(repo: CalendarRepo, day: LocalDate, rev: Int, onDay: (LocalD
                     }
                 }
                 if (day == LocalDate.now()) {
-                    val m = LocalTime.now().let { it.hour * 60 + it.minute }
+                    val m = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalTime().let { it.hour * 60 + it.minute }
                     Box(Modifier.offset(y = hour * (m / 60f) + 8.dp).fillMaxWidth().height(2.dp).background(Color(0xFFE5483C)))
                 }
             }
@@ -531,11 +565,11 @@ private fun TasksView(tasks: MutableList<Task>, save: () -> Unit) {
     } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
         groups.forEach { (name, list) ->
             item { SectionLabel(name, Modifier.padding(start = 6.dp, top = 10.dp, bottom = 6.dp)) }
-            itemsIndexed(list.sortedByDescending { it.priority }, key = { _, t -> t.id }) { i, t ->
+            itemsIndexed(list.sortedByDescending { it.priority }, key = { _, t -> t.id }) { i, t -> Box(Modifier.animateItemPlacement()) {
                 TaskRow(t, Modifier.panelItem(i, list.size), overdue = name == "Overdue", onToggle = {
                     val idx = tasks.indexOfFirst { it.id == t.id }; tasks[idx] = t.copy(done = true, completedAt = System.currentTimeMillis()); save()
                 }, onClick = { editing = t })
-            }
+            }}
         }
         if (done.isNotEmpty()) {
             item { Row(Modifier.padding(top = 14.dp)) { WButton(if (showDone) "Hide completed" else "Show completed (${done.size})", { showDone = !showDone }, kind = ButtonKind.Plain) } }

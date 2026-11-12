@@ -128,11 +128,19 @@ class CountdownWidget : AppWidgetProvider() {
             }
         }
 
+        /** "12d", "5h", "40m": the time left in as few characters as possible, for the 1×1 size. */
+        fun amountShort(ms: Long): String { val d = ms / 86_400_000L; val h = ms / 3_600_000L; return when { d >= 1 -> "${d}d"; h >= 1 -> "${h}h"; else -> "${(ms / 60_000L).coerceAtLeast(1)}m" } }
+
         fun build(c: Context, id: Int): RemoteViews {
             val cfg = CountdownConfig.load(c, id)
-            val v = RemoteViews(c.packageName, R.layout.widget_countdown)
-            val now = System.currentTimeMillis()
             val next = runCatching { target(c, cfg, id) }.getOrNull()
+            return dev.wonderdesk.shared.responsiveWidget(R.layout.widget_countdown_small, R.layout.widget_countdown_wide, R.layout.widget_countdown) { layout -> fill(c, id, cfg, next, layout) }
+        }
+
+        private fun fill(c: Context, id: Int, cfg: CountdownConfig, next: Occurrence?, layout: Int): RemoteViews {
+            val v = RemoteViews(c.packageName, layout)
+            val small = layout == R.layout.widget_countdown_small
+            val now = System.currentTimeMillis()
             v.setTextColor(R.id.w_big, cfg.color); v.setTextColor(R.id.w_chrono, cfg.color)
             if (next == null) {
                 v.setTextViewText(R.id.w_label, cfg.label.ifBlank { "COUNTDOWN" })
@@ -157,6 +165,11 @@ class CountdownWidget : AppWidgetProvider() {
                     }
                     else -> { v.setTextViewText(R.id.w_label, label); v.setTextViewText(R.id.w_big, amount(left, cfg.style)); v.setViewVisibility(R.id.w_chrono, View.GONE); v.setViewVisibility(R.id.w_big, View.VISIBLE) }
                 }
+            }
+            if (small) {
+                v.setViewVisibility(R.id.w_label, android.view.View.GONE); v.setViewVisibility(R.id.w_when, android.view.View.GONE)
+                if (next != null && next.begin - now >= 86_400_000L) v.setTextViewText(R.id.w_big, amountShort(next.begin - now))
+                if (next != null && next.end <= now) v.setTextViewText(R.id.w_big, amountShort(now - next.end) + " ago")
             }
             v.setOnClickPendingIntent(R.id.w_root, PendingIntent.getActivity(c, 2100 + id, Intent(c, MainActivity::class.java).apply { next?.let { putExtra("event", it.eventId) } }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))

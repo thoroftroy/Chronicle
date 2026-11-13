@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.5.5
+
+- Widgets can now match your look: new Bliss blue and Super neon backgrounds, and “Match my Wonderdesk look” follows whatever Control Room is set to
+
 ## v0.5.4
 
 - Up next widget: choose which events it shows. Its settings list what's coming in the next month, most frequent first, so you can switch off things like work every day; or hide all repeating events, or whole calendars. They still show in Chronicle itself

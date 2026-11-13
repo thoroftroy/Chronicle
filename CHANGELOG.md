@@ -1,11 +1,15 @@
 # Chronicle changelog
 
+## v0.5.4
+
+- Up next widget: choose which events it shows. Its settings list what's coming in the next month, most frequent first, so you can switch off things like work every day; or hide all repeating events, or whole calendars. They still show in Chronicle itself
+- Fixes from a full round of stress testing on every screen
+
 ## v0.5.3
 
 - Swipe a task right to complete it, or left to move it to tomorrow
 - Tap the tab you're already on to glide back to the top of its list
 - Nothing required stays hidden: if Android is blocking something the app needs, a slim banner says what and takes you straight to the switch, and Settings › Permissions and access lists everything with its state
-- Up next widget: choose which events it shows. Its settings list what's coming in the next month, most frequent first, so you can switch off things like work every day; or hide all repeating events, or whole calendars. They still show in Chronicle itself
 
 ## v0.5.2
 

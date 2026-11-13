@@ -24,6 +24,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import dev.wonderdesk.shared.applyLook
 
 object Notify {
@@ -146,7 +149,11 @@ class ChronicleWidget : AppWidgetProvider() {
             data class Item(val title: String, val sub: String, val color: Int, val at: Long)
             val items = mutableListOf<Item>()
             if (ContextCompat.checkSelfPermission(c, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
-                CalendarRepo(c).occurrences(now, now + days * 86_400_000L).filter { it.end > now }.take(5).forEach { o ->
+                val hiddenTitles = s.str("hiddenTitles", "").split('\u0001').filter { it.isNotBlank() }.map { it.lowercase() }.toSet()
+                val hiddenCals = s.str("hiddenCals", "").split(',').mapNotNull { it.toLongOrNull() }.toSet()
+                val noRepeats = s.bool("noRepeats", false)
+                CalendarRepo(c).occurrences(now, now + days * 86_400_000L).filter { it.end > now }
+                    .filter { o -> o.title.trim().lowercase() !in hiddenTitles && o.calendarId !in hiddenCals && !(noRepeats && o.recurring) }.take(5).forEach { o ->
                     val time = if (o.allDay) "All day" else DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(o.begin))
                     val d = o.startsOn(ZoneId.systemDefault())
                     val dayText = when (d) { today -> "Today"; today.plusDays(1) -> "Tomorrow"; else -> d.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM")) }
@@ -181,7 +188,18 @@ class UpcomingWidgetSetup : dev.wonderdesk.shared.WidgetSetupActivity() {
         var look by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(runCatching { dev.wonderdesk.shared.WidgetLook.valueOf(s.str("look", "GLASS")) }.getOrDefault(dev.wonderdesk.shared.WidgetLook.GLASS)) }
         var days by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(s.int("days", 14)) }
         var tasks by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(s.bool("tasks", true)) }
-        dev.wonderdesk.shared.WidgetSetup("Chronicle", "Up next widget", onCancel = { finish() }, onSave = { s.put("look" to look.name, "days" to days, "tasks" to tasks); save() }) {
+        var noRepeats by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(s.bool("noRepeats", false)) }
+        var hidden by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(s.str("hiddenTitles", "").split('\u0001').filter { it.isNotBlank() }.toSet()) }
+        var hiddenCals by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(s.str("hiddenCals", "").split(',').mapNotNull { it.toLongOrNull() }.toSet()) }
+        // What's coming up in the next month, most frequent first, so daily things like work are at the top.
+        val titles = androidx.compose.runtime.remember { runCatching {
+            if (ContextCompat.checkSelfPermission(c, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) emptyList()
+            else CalendarRepo(c).occurrences(System.currentTimeMillis(), System.currentTimeMillis() + 31 * 86_400_000L)
+                .groupBy { it.title.trim() }.filter { it.key.isNotBlank() }.map { (t, l) -> Triple(t, l.size, l.any { it.recurring }) }.sortedByDescending { it.second }.take(40)
+        }.getOrDefault(emptyList()) }
+        val cals = androidx.compose.runtime.remember { runCatching { CalendarRepo(c).calendars().filter { it.visible } }.getOrDefault(emptyList()) }
+        dev.wonderdesk.shared.WidgetSetup("Chronicle", "Up next widget", onCancel = { finish() }, onSave = {
+            s.put("look" to look.name, "days" to days, "tasks" to tasks, "noRepeats" to noRepeats, "hiddenTitles" to hidden.joinToString("\u0001"), "hiddenCals" to hiddenCals.joinToString(",")); save() }) {
             dev.wonderdesk.shared.Panel(title = "Shows") {
                 androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(12.dp)) {
                     androidx.compose.material3.Text("Look ahead", style = androidx.compose.material3.MaterialTheme.typography.labelLarge)
@@ -191,8 +209,27 @@ class UpcomingWidgetSetup : dev.wonderdesk.shared.WidgetSetupActivity() {
                 }
                 dev.wonderdesk.shared.PanelDivider()
                 dev.wonderdesk.shared.SwitchRow("Include tasks", tasks, { tasks = it })
+                dev.wonderdesk.shared.PanelDivider()
+                dev.wonderdesk.shared.SwitchRow("Hide all repeating events", noRepeats, { noRepeats = it }, subtitle = "Only one-off plans, like appointments and trips")
+            }
+            if (titles.isNotEmpty()) dev.wonderdesk.shared.Panel(title = "Events to show", footer = "Switch off the ones you don't need reminding of, like work every day. They still show in Chronicle itself.") {
+                titles.forEachIndexed { i, (t, n, rep) ->
+                    if (i > 0) dev.wonderdesk.shared.PanelDivider(16.dp)
+                    val on = t !in hidden
+                    dev.wonderdesk.shared.ListRow(t, subtitle = (if (n == 1) "Once" else "$n times") + " in the next month" + if (rep) " · repeats" else "",
+                        trailing = { androidx.compose.material3.Switch(on, { v -> hidden = if (v) hidden - t else hidden + t }) }, onClick = { hidden = if (on) hidden + t else hidden - t })
+                }
+            }
+            if (cals.size > 1) dev.wonderdesk.shared.Panel(title = "Calendars") {
+                cals.forEachIndexed { i, cal ->
+                    if (i > 0) dev.wonderdesk.shared.PanelDivider(16.dp)
+                    val on = cal.id !in hiddenCals
+                    dev.wonderdesk.shared.ListRow(cal.name, subtitle = cal.account, leading = { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.size(14.dp).clip(androidx.compose.foundation.shape.CircleShape).background(androidx.compose.ui.graphics.Color(cal.color))) },
+                        trailing = { androidx.compose.material3.Switch(on, { v -> hiddenCals = if (v) hiddenCals - cal.id else hiddenCals + cal.id }) })
+                }
             }
             dev.wonderdesk.shared.WidgetLookPicker(look) { look = it }
         }
     }
 }
+

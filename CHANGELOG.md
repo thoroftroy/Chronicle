@@ -1,5 +1,11 @@
 # Chronicle changelog
 
+## v0.5.3
+
+- Swipe a task right to complete it, or left to move it to tomorrow
+- Tap the tab you're already on to glide back to the top of its list
+- Nothing required stays hidden: if Android is blocking something the app needs, a slim banner says what and takes you straight to the switch, and Settings › Permissions and access lists everything with its state
+
 ## v0.5.2
 
 - The day view now swipes smoothly between days too, keeping the timeline at the same hour

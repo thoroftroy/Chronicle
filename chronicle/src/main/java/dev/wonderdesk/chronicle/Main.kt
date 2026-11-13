@@ -71,6 +71,12 @@ class MainActivity : WonderActivity() {
     companion object { val incoming = mutableStateOf<Intent?>(null) }
 }
 
+/** What Android must allow for this app to work fully; shown as a banner when off and in Settings. */
+private val APP_NEEDS by lazy { listOf(
+    WonderNeed("Calendar", "Shows and edits the calendars on your phone, including Google ones", permissions = listOf(android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.WRITE_CALENDAR)),
+    WonderNeed.notifications("Event and task reminders"),
+) }
+
 private const val ABOUT = "Chronicle is your calendar. It shows and edits the calendars already on your phone, including Google and other synced accounts, " +
     "so changes sync back to them. It also keeps tasks with due dates, sends reminders, imports and exports .ics files, and has a home-screen widget."
 
@@ -127,7 +133,7 @@ fun ChronicleApp() {
         EventEditor(edit, repo, onClose = { editing = null }, onSaved = { revision.intValue++; ChronicleWidget.refresh(context); editing = null })
         return
     }
-    WonderApp(
+    WonderApp(needs = APP_NEEDS, 
         appName = "Chronicle", about = ABOUT,
         tabs = listOf(
             WonderTab("month", "Month", WonderIcons.CalendarMonth),
@@ -374,7 +380,7 @@ private fun DayList(selected: LocalDate, today: LocalDate, now: Long, occ: List<
     val p = wonderPalette()
     val dayOcc = occ.filter { it.covers(selected, zone) }.sortedWith(compareByDescending<Occurrence> { it.allDay }.thenBy { it.begin })
     val dayTasks = tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == selected }
-    LazyColumn(modifier, contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 16.dp)) {
+    LazyColumn(modifier, state = rememberTabTopList(), contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 16.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)) {
                 Column(Modifier.weight(1f)) {
@@ -526,7 +532,7 @@ private fun AgendaView(repo: CalendarRepo, from: LocalDate, rev: Int, searching:
             Segmented(listOf("Upcoming", "Past"), if (past) 1 else 0) { past = it == 1 }
         }
         if (byDay.isEmpty()) EmptyState(if (query.isNotBlank()) "No matches" else "Nothing here", if (past) "No events in the last 90 days." else "No events in the next four months.", icon = WonderIcons.EventNote)
-        else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+        else LazyColumn(Modifier.fillMaxSize(), state = rememberTabTopList(), contentPadding = PaddingValues(16.dp)) {
             byDay.forEach { (d, list) ->
                 item(key = "h$d") {
                     Row(Modifier.padding(start = 6.dp, top = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
@@ -562,13 +568,23 @@ private fun TasksView(tasks: MutableList<Task>, save: () -> Unit) {
     if (open.isEmpty() && done.isEmpty() && editing == null) {
         EmptyState("No tasks", "Keep a to-do list with due dates. Tasks also show up in your month view and widget.", icon = WonderIcons.CheckCircle,
             action = { WButton("New task", { tasks.add(0, Task()); editing = tasks[0] }, icon = WonderIcons.Add, kind = ButtonKind.Primary) })
-    } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+    } else LazyColumn(Modifier.fillMaxSize(), state = rememberTabTopList(), contentPadding = PaddingValues(16.dp)) {
         groups.forEach { (name, list) ->
             item { SectionLabel(name, Modifier.padding(start = 6.dp, top = 10.dp, bottom = 6.dp)) }
             itemsIndexed(list.sortedByDescending { it.priority }, key = { _, t -> t.id }) { i, t -> Box(Modifier.animateItemPlacement()) {
-                TaskRow(t, Modifier.panelItem(i, list.size), overdue = name == "Overdue", onToggle = {
-                    val idx = tasks.indexOfFirst { it.id == t.id }; tasks[idx] = t.copy(done = true, completedAt = System.currentTimeMillis()); save()
-                }, onClick = { editing = t })
+                val r = wonderPalette().panelRadius
+                fun complete() { val idx = tasks.indexOfFirst { it.id == t.id }; if (idx >= 0) { tasks[idx] = t.copy(done = true, completedAt = System.currentTimeMillis()); save() } }
+                // Swipe right to complete, left to push it to tomorrow.
+                SwipeActions(start = SwipeAction("Done", WonderIcons.CheckCircle, Color(0xFF2E9E44), destructive = true) { complete() },
+                    end = SwipeAction("Tomorrow", WonderIcons.Schedule, Color(0xFF1E7FE8)) {
+                        val idx = tasks.indexOfFirst { it.id == t.id }
+                        if (idx >= 0) { val base = java.time.LocalDate.now().plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault())
+                            val keep = if (t.due > 0 && t.dueHasTime) java.time.Instant.ofEpochMilli(t.due).atZone(java.time.ZoneId.systemDefault()).toLocalTime() else java.time.LocalTime.MIDNIGHT
+                            tasks[idx] = t.copy(due = base.with(keep).toInstant().toEpochMilli()); save() }
+                    },
+                    modifier = Modifier.clip(RoundedCornerShape(if (i == 0) r else 0.dp, if (i == 0) r else 0.dp, if (i == list.size - 1) r else 0.dp, if (i == list.size - 1) r else 0.dp))) {
+                    TaskRow(t, Modifier.panelItem(i, list.size), overdue = name == "Overdue", onToggle = { complete() }, onClick = { editing = t })
+                }
             }}
         }
         if (done.isNotEmpty()) {

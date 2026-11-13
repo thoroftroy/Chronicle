@@ -225,7 +225,7 @@ private fun CountdownSetup(widgetId: Int, onDone: (CountdownConfig, Occurrence?)
     WonderApp(appName = "Chronicle", about = "Countdown widget", title = "Countdown widget", onBack = { (context as? Activity)?.finish() },
         actions = { TextButton(onClick = { onDone(cfg, events.orEmpty().firstOrNull { it.eventId == cfg.eventId }) }) { Text("Done", color = p.toolbarText, fontWeight = FontWeight.SemiBold) } }) {
         val shown = events.orEmpty().filter { q.isBlank() || it.title.contains(q, true) }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = rememberTabTopList(), contentPadding = PaddingValues(16.dp)) {
             item {
                 Panel(title = "Look", footer = "Counts down to the day and time, ticks live in the last 24 hours and counts the days since once it's over.") {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

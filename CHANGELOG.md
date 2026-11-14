@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.5.7
+
+- Widgets: choose the title colour in each widget's settings (automatic, white, dark, Aqua blue, Super pink or gold), on top of the background looks
+
 ## v0.5.6
 
 - Reminders no longer come back after you swipe them away: Android re-sends calendar reminders after a restart or time change until they're marked delivered, and Chronicle now marks them (and never shows the same one twice)

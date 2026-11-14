@@ -75,7 +75,7 @@ class MainActivity : WonderActivity() {
 private val APP_NEEDS by lazy { listOf(
     WonderNeed("Calendar", "Shows and edits the calendars on your phone, including Google ones", permissions = listOf(android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.WRITE_CALENDAR)),
     WonderNeed.notifications("Event and task reminders"),
-    WonderNeed("One set of reminders", "Google Calendar is also on, so you get every reminder twice. Turn it off (Disable) or switch off its notifications",
+    WonderNeed("Reminders from one app only", "Google Calendar is also on, so you get every reminder twice. Turn it off (Disable) or switch off its notifications", alert = "Every reminder arrives twice",
         check = { c -> runCatching { !c.packageManager.getApplicationInfo("com.google.android.calendar", 0).enabled }.getOrDefault(true) },
         fix = { c -> c.launchSafely(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:com.google.android.calendar")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) {} }),
 ) }
@@ -103,6 +103,7 @@ fun ChronicleApp() {
     var selected by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
     val day = LocalDate.ofEpochDay(selected)
     var editing by remember { mutableStateOf<EventDraft?>(null) }
+    var quick by remember { mutableStateOf(false) }
     var jump by remember { mutableStateOf(false) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var importing by remember { mutableStateOf<List<EventDraft>?>(null) }
@@ -131,6 +132,8 @@ fun ChronicleApp() {
     }
     LaunchedEffect(granted) { if (granted) { Notify.channels(context); ChronicleWidget.refresh(context) } }
 
+    if (quick) QuickAddDialog(repo, onDismiss = { quick = false }, onDetails = { d -> quick = false; editing = d },
+        onAdded = { quick = false; revision.intValue++; ChronicleWidget.refresh(context) })
     val edit = editing
     if (edit != null) {
         EventEditor(edit, repo, onClose = { editing = null }, onSaved = { revision.intValue++; ChronicleWidget.refresh(context); editing = null })
@@ -156,6 +159,7 @@ fun ChronicleApp() {
                 ToolbarButton(WonderIcons.Event, "Go to date", { jump = true })
             }
             if (tab == "agenda") ToolbarButton(WonderIcons.Search, "Search events", { searching = !searching })
+            if (tab != "tasks") ToolbarButton(WonderIcons.Bolt, "Quick add", { quick = true })
             ToolbarButton(WonderIcons.Add, if (tab == "tasks") "New task" else "New event", {
                 if (tab == "tasks") { tasks.add(0, Task(title = "")); } else editing = newDraft(day, repo)
             })
@@ -916,4 +920,39 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
         SwitchRow("Event reminders", reminders, { reminders = it; prefs.edit().putBoolean("reminders", it).apply() },
             subtitle = "Chronicle notifies you at each event's reminder time", icon = WonderIcons.Notifications, tint = Color(0xFFE5483C))
     }
+}
+
+
+/** Type an event in plain words; Chronicle shows what it understood before adding it. */
+@Composable
+private fun QuickAddDialog(repo: CalendarRepo, onDismiss: () -> Unit, onDetails: (EventDraft) -> Unit, onAdded: () -> Unit) {
+    val p = wonderPalette()
+    val toast = LocalToast.current
+    var text by remember { mutableStateOf("") }
+    val parsed = remember(text) { QuickAdd.parse(text) }
+    fun draft(): EventDraft {
+        val base = newDraft(parsed.day, repo, parsed.time ?: LocalTime.of(9, 0))
+        val zone = ZoneId.systemDefault()
+        return if (parsed.allDay || parsed.time == null) base.copy(title = parsed.title, allDay = true,
+            start = parsed.day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), end = parsed.day.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())
+        else base.copy(title = parsed.title, start = parsed.day.atTime(parsed.time).atZone(zone).toInstant().toEpochMilli(),
+            end = parsed.day.atTime(parsed.time).atZone(zone).toInstant().toEpochMilli() + parsed.minutes * 60_000L)
+    }
+    WonderDialog(onDismissRequest = onDismiss, title = { Text("Quick add") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Field(text, { text = it }, "Lunch with Sam tomorrow at 1pm", supporting = "Say when in plain words: today, friday, 12 Dec, at 3pm, 2-4pm, for 45 min, all day")
+            if (text.isNotBlank()) Panel {
+                val t = parsed.time
+                ListRow(parsed.title, subtitle = parsed.day.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM")) + " · " +
+                    (if (t == null) "All day" else t.format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT)) + " – " +
+                        t.plusMinutes(parsed.minutes.toLong()).format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))),
+                    icon = WonderIcons.Event, tint = p.accent)
+            }
+        }
+    }, confirmButton = {
+        TextButton(enabled = text.isNotBlank(), onClick = {
+            val r = runCatching { repo.save(draft()) }
+            if (r.isSuccess) { toast("Added “${parsed.title}”"); onAdded() } else toast("Couldn't add it: ${r.exceptionOrNull()?.message}")
+        }) { Text("Add") }
+    }, dismissButton = { TextButton(enabled = text.isNotBlank(), onClick = { onDetails(draft()) }) { Text("More details") } })
 }

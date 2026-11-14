@@ -1,5 +1,10 @@
 # Chronicle changelog
 
+## v0.5.10
+
+- Quick add (⚡ in the toolbar): type an event in plain words, like “Lunch with Sam friday at 1pm for 2 hours” or “Trip 12 Dec all day”. Chronicle shows exactly what it understood (title, day and time) before adding it; “More details” opens the full editor
+- The duplicate-reminders banner now says plainly what's wrong: every reminder arrives twice
+
 ## v0.5.9
 
 - Lighter on the battery: in the Super look the drifting sparkles settle after a few seconds without a touch (the next tap wakes them), so a screen you're reading no longer redraws 25 times a second

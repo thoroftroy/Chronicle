@@ -3,6 +3,10 @@
 ## v0.5.5
 
 - Widgets can now match your look: new Bliss blue and Super neon backgrounds, and “Match my Wonderdesk look” follows whatever Control Room is set to
+- Reminders no longer come back after you swipe them away: Android re-sends calendar reminders after a restart or time change until they're marked delivered, and Chronicle now marks them (and never shows the same one twice)
+- Reminders for events that ended while the phone was off are skipped instead of arriving late
+- If Google Calendar is still on (so every reminder shows twice), Chronicle says so and takes you to switch it off
+- Widgets update by themselves as soon as a calendar changes, the time zone changes or the app updates
 
 ## v0.5.4
 

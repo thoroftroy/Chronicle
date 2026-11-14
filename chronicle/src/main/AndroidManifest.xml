@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <queries><package android:name="com.google.android.calendar" /></queries>
     <application android:enableOnBackInvokedCallback="true" android:label="Chronicle">
         <activity android:name=".MainActivity" android:exported="true" android:resizeableActivity="true" android:launchMode="singleTask">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
@@ -19,7 +20,7 @@
         </receiver>
         <receiver android:name=".TaskDueReceiver" android:exported="false" />
         <receiver android:name=".ChronicleBootReceiver" android:exported="true">
-            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
+            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.TIMEZONE_CHANGED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter><intent-filter><action android:name="android.intent.action.PROVIDER_CHANGED" /><data android:scheme="content" /><data android:host="com.android.calendar" /></intent-filter>
         </receiver>
         <receiver android:name=".ChronicleWidget" android:exported="true" android:label="Chronicle: Up next">
             <intent-filter>

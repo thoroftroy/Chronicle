@@ -75,6 +75,9 @@ class MainActivity : WonderActivity() {
 private val APP_NEEDS by lazy { listOf(
     WonderNeed("Calendar", "Shows and edits the calendars on your phone, including Google ones", permissions = listOf(android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.WRITE_CALENDAR)),
     WonderNeed.notifications("Event and task reminders"),
+    WonderNeed("One set of reminders", "Google Calendar is also on, so you get every reminder twice. Turn it off (Disable) or switch off its notifications",
+        check = { c -> runCatching { !c.packageManager.getApplicationInfo("com.google.android.calendar", 0).enabled }.getOrDefault(true) },
+        fix = { c -> c.launchSafely(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:com.google.android.calendar")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) {} }),
 ) }
 
 private const val ABOUT = "Chronicle is your calendar. It shows and edits the calendars already on your phone, including Google and other synced accounts, " +

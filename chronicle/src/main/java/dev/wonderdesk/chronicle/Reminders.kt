@@ -68,10 +68,19 @@ class EventReminderReceiver : BroadcastReceiver() {
         runCatching {
             c.contentResolver.query(CalendarContract.CalendarAlerts.CONTENT_URI_BY_INSTANCE,
                 arrayOf(CalendarContract.CalendarAlerts.EVENT_ID, CalendarContract.CalendarAlerts.TITLE, CalendarContract.CalendarAlerts.BEGIN,
-                    CalendarContract.CalendarAlerts.EVENT_LOCATION, CalendarContract.CalendarAlerts.ALL_DAY),
+                    CalendarContract.CalendarAlerts.EVENT_LOCATION, CalendarContract.CalendarAlerts.ALL_DAY, CalendarContract.CalendarAlerts._ID, CalendarContract.CalendarAlerts.STATE),
                 "${CalendarContract.CalendarAlerts.ALARM_TIME} = ?", arrayOf(alarmTime.toString()), null)?.use { cur ->
+                val fired = c.getSharedPreferences("chronicle-fired", Context.MODE_PRIVATE)
                 while (cur.moveToNext()) {
                     val id = cur.getLong(0); val begin = cur.getLong(2)
+                    // Android re-sends reminders after restarts and time changes until they're marked delivered: show each one once.
+                    val key = "$id:$begin:$alarmTime"
+                    if (fired.contains(key) || cur.getInt(6) == CalendarContract.CalendarAlerts.STATE_DISMISSED) continue
+                    fired.edit().putLong(key, System.currentTimeMillis()).apply()
+                    runCatching { c.contentResolver.update(android.content.ContentUris.withAppendedId(CalendarContract.CalendarAlerts.CONTENT_URI, cur.getLong(5)),
+                        android.content.ContentValues().apply { put(CalendarContract.CalendarAlerts.STATE, CalendarContract.CalendarAlerts.STATE_FIRED) }, null, null) }
+                    // A reminder that arrives long after its event ended (phone was off) isn't useful any more.
+                    if (begin + 3_600_000L < System.currentTimeMillis() && cur.getInt(4) == 0) continue
                     val title = cur.getString(1)?.ifBlank { null } ?: "Event"
                     val whenText = if (cur.getInt(4) == 1) "Today" else DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(begin)) + " · " + countdown(System.currentTimeMillis(), begin, begin + 1)
                     val where = cur.getString(3).orEmpty()
@@ -82,6 +91,9 @@ class EventReminderReceiver : BroadcastReceiver() {
                 }
             }
         }
+        // Forget delivered reminders after two weeks.
+        runCatching { val f = c.getSharedPreferences("chronicle-fired", Context.MODE_PRIVATE); val old = System.currentTimeMillis() - 14 * 86_400_000L
+            f.edit().apply { f.all.forEach { (k, v) -> if ((v as? Long ?: 0L) < old) remove(k) } }.apply() }
         ChronicleWidget.refresh(c)
     }
 }
@@ -99,7 +111,7 @@ class TaskDueReceiver : BroadcastReceiver() {
 }
 
 class ChronicleBootReceiver : BroadcastReceiver() {
-    override fun onReceive(c: Context, intent: Intent) { Notify.scheduleTasks(c); ChronicleWidget.refresh(c) }
+    override fun onReceive(c: Context, intent: Intent) { Notify.scheduleTasks(c); ChronicleWidget.refresh(c); dev.wonderdesk.shared.refreshWidgets(c, CountdownWidget::class.java) }
 }
 
 /** Home-screen widget: today's date, then the next events and tasks with countdowns. */

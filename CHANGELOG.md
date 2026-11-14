@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.5.9
+
+- Lighter on the battery: in the Super look the drifting sparkles settle after a few seconds without a touch (the next tap wakes them), so a screen you're reading no longer redraws 25 times a second
+
 ## v0.5.8
 
 - Swiping between months no longer flashes: months you've seen show their events instantly and update in place

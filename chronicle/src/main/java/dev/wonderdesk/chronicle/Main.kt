@@ -216,10 +216,21 @@ private fun newDraft(day: LocalDate, repo: CalendarRepo, time: LocalTime? = null
     return EventDraft(calendarId = defaultCal?.id ?: -1, start = start, end = start + 3_600_000L)
 }
 
+/** Months already read, so swiping back and forth shows events instantly instead of blinking empty first. */
+private object OccCache {
+    val map = object : android.util.LruCache<String, List<Occurrence>>(36) {}
+}
+
 @Composable
 private fun rememberOccurrences(repo: CalendarRepo, from: Long, to: Long, rev: Int, query: String? = null): List<Occurrence> {
-    var list by remember { mutableStateOf<List<Occurrence>>(emptyList()) }
-    LaunchedEffect(from, to, rev, query) { list = withContext(Dispatchers.IO) { repo.occurrences(from, to, query) } }
+    val key = "$from:$to:${query.orEmpty()}"
+    // Start from what we already know for this range (even from before the last change) and refresh in place.
+    var list by remember(key) { mutableStateOf(OccCache.map.get(key) ?: emptyList()) }
+    LaunchedEffect(key, rev) {
+        val fresh = withContext(Dispatchers.IO) { repo.occurrences(from, to, query) }
+        OccCache.map.put(key, fresh)
+        if (fresh != list) list = fresh
+    }
     return list
 }
 

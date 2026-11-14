@@ -124,6 +124,10 @@ class CountdownWidget : AppWidgetProvider() {
                 "days" -> if (days == 1L) "1 day" else "$days days"
                 "weeks" -> if (days >= 14) "${days / 7} wk ${days % 7} d" else "$days d $hours h"
                 "dhm" -> if (days > 0) "$days d $hours h" else "$hours h $mins m"
+                "hours" -> "%,d hours".format(ms / 3_600_000L)
+                "minutes" -> "%,d minutes".format(ms / 60_000L)
+                "sleeps" -> java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), java.time.Instant.ofEpochMilli(System.currentTimeMillis() + ms).atZone(java.time.ZoneId.systemDefault()).toLocalDate()).let { if (it == 1L) "1 sleep" else "$it sleeps" }
+                "months" -> { val m = days / 30; if (m >= 1) "$m mo ${days % 30} d" else "$days days" }
                 else -> when { days >= 7 -> "$days days"; days >= 1 -> "$days d $hours h"; else -> "$hours h $mins m" }
             }
         }
@@ -231,8 +235,9 @@ private fun CountdownSetup(widgetId: Int, onDone: (CountdownConfig, Occurrence?)
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Field(cfg.label, { cfg = cfg.copy(label = it.take(24)) }, "Label (optional)", supporting = "Shown above the event name, like OUR WEDDING")
                         Text("Show time left as", style = MaterialTheme.typography.labelLarge)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("auto" to "Automatic", "days" to "Days", "weeks" to "Weeks", "dhm" to "Days + hours").forEach { (k, n) -> Chip(n, cfg.style == k, { cfg = cfg.copy(style = k) }) }
+                        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("auto" to "Automatic", "days" to "Days", "weeks" to "Weeks", "months" to "Months", "dhm" to "Days + hours", "hours" to "Hours only", "minutes" to "Minutes only", "sleeps" to "Sleeps").forEach { (k, n) -> Chip(n, cfg.style == k, { cfg = cfg.copy(style = k) }) }
                         }
                         Text("Colour", style = MaterialTheme.typography.labelLarge)
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

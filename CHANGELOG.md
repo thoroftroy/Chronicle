@@ -1,5 +1,15 @@
 # Chronicle changelog
 
+## v0.5.11
+
+- Alarms & reminders can be switched on now (it was greyed out): task reminders then ring on the exact minute, even in battery saving. Find it in Settings → Permissions and access
+- The month name at the top shrinks to fit instead of being cut off ("Novembe…")
+- Notices at the top show their whole message instead of cutting it off
+- Alarms & reminders can be switched on now (it was greyed out): task reminders then ring on the exact minute, even in battery saving. Find it in Settings → Permissions and access
+- The month name at the top shrinks to fit instead of being cut off ("Novembe…")
+- Notices at the top show their whole message instead of cutting it off
+- Fixed a rare crash from Android's scrolling-screenshot feature
+
 ## v0.5.10
 
 - Quick add (⚡ in the toolbar): type an event in plain words, like “Lunch with Sam friday at 1pm for 2 hours” or “Trip 12 Dec all day”. Chronicle shows exactly what it understood (title, day and time) before adding it; “More details” opens the full editor

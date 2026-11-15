@@ -52,7 +52,11 @@ object Notify {
             val pi = PendingIntent.getBroadcast(c, t.id.hashCode(), Intent(c, TaskDueReceiver::class.java).putExtra("id", t.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             am.cancel(pi)
             val at = if (t.dueHasTime) t.due else if (t.due > 0) LocalDate.ofEpochDay(t.due / 86_400_000L).atTime(9, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() else 0L
-            if (!t.done && at > System.currentTimeMillis()) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            if (!t.done && at > System.currentTimeMillis()) {
+                // On time to the minute when Alarms & reminders is on; otherwise Android may hold it back a few minutes in battery saving.
+                if (android.os.Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+                else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            }
         }
     }
 }

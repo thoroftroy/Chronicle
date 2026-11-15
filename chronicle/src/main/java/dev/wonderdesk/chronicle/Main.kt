@@ -75,6 +75,7 @@ class MainActivity : WonderActivity() {
 private val APP_NEEDS by lazy { listOf(
     WonderNeed("Calendar", "Shows and edits the calendars on your phone, including Google ones", permissions = listOf(android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.WRITE_CALENDAR)),
     WonderNeed.notifications("Event and task reminders"),
+    WonderNeed("Alarms & reminders", "Task reminders ring on the exact minute, even when the phone is idle in battery saving", required = false, access = SpecialAccess.Kind.EXACT_ALARMS),
     WonderNeed("Reminders from one app only", "Google Calendar is also on, so you get every reminder twice. Turn it off (Disable) or switch off its notifications", alert = "Every reminder arrives twice",
         check = { c -> runCatching { !c.packageManager.getApplicationInfo("com.google.android.calendar", 0).enabled }.getOrDefault(true) },
         fix = { c -> c.launchSafely(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:com.google.android.calendar")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) {} }),

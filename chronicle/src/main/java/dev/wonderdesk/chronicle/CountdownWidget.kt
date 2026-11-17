@@ -259,7 +259,7 @@ private fun CountdownSetup(widgetId: Int, onDone: (CountdownConfig, Occurrence?)
                 SearchField(q, { q = it }, "Find an event")
                 Spacer(Modifier.height(8.dp))
                 if (!granted) Text("Allow calendar access in Chronicle to pick an event.", color = p.secondaryText, style = MaterialTheme.typography.bodySmall)
-                else if (events == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+                else if (events == null) LoadingStatus("Finding your events", detail = "Reading your calendars", compact = true)
                 else if (shown.isEmpty()) Text(if (q.isBlank()) "No upcoming events. Add one in Chronicle first." else "No events match “$q”.", color = p.secondaryText, style = MaterialTheme.typography.bodySmall)
             }
             itemsIndexed(shown, key = { i, o -> "${o.eventId}-$i" }) { i, o ->

@@ -1,5 +1,10 @@
 # Chronicle changelog
 
+## v0.5.12
+
+- Loading screens now say what they are doing instead of showing a bare spinner
+- Wording tidied so no sentence needs a dash
+
 ## v0.5.11
 
 - Alarms & reminders can be switched on now (it was greyed out): task reminders then ring on the exact minute, even in battery saving. Find it in Settings → Permissions and access

@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.5.16
+
+- New setting: which calendar new events go into
+
 ## v0.5.15
 
 - New settings: dim weekend names, and which view Chronicle opens on

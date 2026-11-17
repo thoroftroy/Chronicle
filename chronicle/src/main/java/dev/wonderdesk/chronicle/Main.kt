@@ -222,7 +222,7 @@ private fun newDraft(day: LocalDate, repo: CalendarRepo, time: LocalTime? = null
     val now = LocalTime.now()
     val t = time ?: LocalTime.of((now.hour + 1).coerceAtMost(23), 0)
     val start = day.atTime(t).atZone(zone).toInstant().toEpochMilli()
-    val defaultCal = repo.calendars().filter { it.writable && it.visible }.let { cals -> cals.firstOrNull { it.account.contains("@") } ?: cals.firstOrNull() }
+    val defaultCal = repo.calendars().filter { it.writable && it.visible }.let { cals -> cals.firstOrNull { it.id.toInt() == repo.setting("defCal", -1) } ?: cals.firstOrNull { it.account.contains("@") } ?: cals.firstOrNull() }
     return EventDraft(calendarId = defaultCal?.id ?: -1, start = start, end = start + repo.setting("defLen", 60) * 60_000L, reminders = repo.setting("defRem", 15).let { if (it < 0) emptyList() else listOf(it) })
 }
 
@@ -940,6 +940,15 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("month" to "Month", "day" to "Day", "agenda" to "Agenda", "tasks" to "Tasks").forEach { (v, n) -> Chip(n, vt == v, { vt = v; prefs.edit().putString("tab", v).apply() }) } } }
     }
     Panel(title = "New events") {
+        if (granted) {
+            var dc by remember { mutableIntStateOf(prefs.getInt("defCal", -1)) }
+            val writable = remember(cals) { cals.filter { it.writable } }
+            if (writable.isNotEmpty()) { Column(Modifier.padding(16.dp, 10.dp)) { Text("Calendar for new events", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Chip("Automatic", dc == -1, { dc = -1; prefs.edit().putInt("defCal", -1).apply() })
+                    writable.forEach { c -> Chip(c.name, dc == c.id.toInt(), { dc = c.id.toInt(); prefs.edit().putInt("defCal", c.id.toInt()).apply() }) } } }
+                PanelDivider() }
+        }
         var len by remember { mutableIntStateOf(prefs.getInt("defLen", 60)) }
         Column(Modifier.padding(16.dp, 10.dp)) { Text("Length", style = MaterialTheme.typography.labelLarge)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(15 to "15 min", 30 to "30 min", 60 to "1 hour", 90 to "90 min", 120 to "2 hours").forEach { (v, n) -> Chip(n, len == v, { len = v; prefs.edit().putInt("defLen", v).apply() }) } } }

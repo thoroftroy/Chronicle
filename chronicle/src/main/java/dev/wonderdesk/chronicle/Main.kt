@@ -325,7 +325,7 @@ private fun MonthHeader(selected: LocalDate, firstDow: DayOfWeek, onSelect: (Loc
     Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp)) {
         (0 until 7).map { firstDow.plus(it.toLong()) }.forEach { d ->
             Text(d.getDisplayName(TextStyle.SHORT, Locale.getDefault()), Modifier.weight(1f), textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = if (d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY) p.secondaryText.copy(alpha = .7f) else p.secondaryText)
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = if ((d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY) && LocalContext.current.prefs("chronicle").getBoolean("dimWeekend", true)) p.secondaryText.copy(alpha = .7f) else p.secondaryText)
         }
     }
 }
@@ -930,6 +930,14 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
         var hrs by remember { mutableIntStateOf(prefs.getInt("hours", 0)) }
         Column(Modifier.padding(16.dp, 10.dp)) { Text("Clock", style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "Follow phone", 12 to "12 hour", 24 to "24 hour").forEach { (v, n) -> Chip(n, hrs == v, { hrs = v; prefs.edit().putInt("hours", v).apply(); revision.intValue++ }) } } }
+    }
+    Panel(title = "Look") {
+        var dw by remember { mutableStateOf(prefs.getBoolean("dimWeekend", true)) }
+        SwitchRow("Dim weekend names", dw, { dw = it; prefs.edit().putBoolean("dimWeekend", it).apply(); revision.intValue++ }, icon = WonderIcons.CalendarMonth, tint = Color(0xFF1E7FE8))
+        PanelDivider()
+        var vt by remember { mutableStateOf(prefs.getString("tab", "month") ?: "month") }
+        Column(Modifier.padding(16.dp, 10.dp)) { Text("Open on", style = MaterialTheme.typography.labelLarge)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("month" to "Month", "day" to "Day", "agenda" to "Agenda", "tasks" to "Tasks").forEach { (v, n) -> Chip(n, vt == v, { vt = v; prefs.edit().putString("tab", v).apply() }) } } }
     }
     Panel(title = "New events") {
         var len by remember { mutableIntStateOf(prefs.getInt("defLen", 60)) }

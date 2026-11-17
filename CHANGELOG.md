@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.5.15
+
+- New settings: dim weekend names, and which view Chronicle opens on
+
 ## v0.5.14
 
 - Text size and accent colour chosen in Control Room now apply here

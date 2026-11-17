@@ -1,5 +1,10 @@
 # Chronicle changelog
 
+## v0.5.14
+
+- Text size and accent colour chosen in Control Room now apply here
+- New Rotate with the phone switch in Settings
+
 ## v0.5.13
 
 - New settings: first day of the week, 12 or 24 hour clock, default length and default reminder for new events

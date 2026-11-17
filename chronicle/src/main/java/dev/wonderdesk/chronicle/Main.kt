@@ -213,12 +213,17 @@ fun ChronicleApp() {
 
 private fun hasCalendar(c: Context) = ContextCompat.checkSelfPermission(c, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
+/** First day of the week: automatic, or Monday, Sunday or Saturday from settings. */
+private fun weekStart(c: Context): DayOfWeek = when (c.prefs("chronicle").getInt("weekStart", 0)) { 1 -> DayOfWeek.MONDAY; 7 -> DayOfWeek.SUNDAY; 6 -> DayOfWeek.SATURDAY; else -> WeekFields.of(Locale.getDefault()).firstDayOfWeek }
+/** 24 hour clock: follows the phone, or forced on or off from settings. */
+private fun use24(c: Context): Boolean = when (c.prefs("chronicle").getInt("hours", 0)) { 24 -> true; 12 -> false; else -> android.text.format.DateFormat.is24HourFormat(c) }
+
 private fun newDraft(day: LocalDate, repo: CalendarRepo, time: LocalTime? = null): EventDraft {
     val now = LocalTime.now()
     val t = time ?: LocalTime.of((now.hour + 1).coerceAtMost(23), 0)
     val start = day.atTime(t).atZone(zone).toInstant().toEpochMilli()
     val defaultCal = repo.calendars().filter { it.writable && it.visible }.let { cals -> cals.firstOrNull { it.account.contains("@") } ?: cals.firstOrNull() }
-    return EventDraft(calendarId = defaultCal?.id ?: -1, start = start, end = start + 3_600_000L)
+    return EventDraft(calendarId = defaultCal?.id ?: -1, start = start, end = start + repo.setting("defLen", 60) * 60_000L, reminders = repo.setting("defRem", 15).let { if (it < 0) emptyList() else listOf(it) })
 }
 
 /** Months already read, so swiping back and forth shows events instantly instead of blinking empty first. */
@@ -256,7 +261,7 @@ private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: 
     val context = LocalContext.current
     LaunchedEffect(Unit) { MonthPrefs.load(context) }
     val ym = YearMonth.from(selected)
-    val firstDow = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+    val firstDow = weekStart(context)
     val gridStart = ym.atDay(1).let { d -> d.minusDays(((d.dayOfWeek.value - firstDow.value + 7) % 7).toLong()) }
     // Only the weeks this month touches (4 to 6), so every day gets as much room as possible.
     val weeks = ((java.time.temporal.ChronoUnit.DAYS.between(gridStart, ym.atEndOfMonth()) / 7) + 1).toInt()
@@ -382,7 +387,7 @@ private fun EventChip(o: Occurrence, day: LocalDate, alpha: Float, times: Boolea
             color = Color.White, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
     } else {
         val startsToday = Instant.ofEpochMilli(o.begin).atZone(zone).toLocalDate() == day
-        val time = if (times && startsToday) java.time.format.DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(LocalContext.current)) "H:mm" else "h:mma")
+        val time = if (times && startsToday) java.time.format.DateTimeFormatter.ofPattern(if (use24(LocalContext.current)) "H:mm" else "h:mma")
             .format(Instant.ofEpochMilli(o.begin).atZone(zone)).lowercase().replace(":00", "").removeSuffix("m") + " " else ""
         Row(Modifier.fillMaxWidth().padding(top = 2.dp).clip(RoundedCornerShape(4.dp)).background(c.copy(alpha = .18f * alpha)).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(c.copy(alpha = alpha)))
@@ -463,7 +468,7 @@ private fun DayView(repo: CalendarRepo, day: LocalDate, rev: Int, onDay: (LocalD
     fun go(d: LocalDate) { scope.launch { pager.animateScrollToPage(pageOf(d)) } }
     Column(Modifier.fillMaxSize()) {
         // week strip
-        val weekStart = day.minusDays(((day.dayOfWeek.value - WeekFields.of(Locale.getDefault()).firstDayOfWeek.value + 7) % 7).toLong())
+        val weekStart = day.minusDays(((day.dayOfWeek.value - weekStart(LocalContext.current).value + 7) % 7).toLong())
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { go(day.minusWeeks(1)) }) { Icon(WonderIcons.NavigateBefore, "Previous week", tint = p.accent) }
             (0 until 7).map { weekStart.plusDays(it.toLong()) }.forEach { d ->
@@ -501,7 +506,7 @@ private fun DayPage(repo: CalendarRepo, day: LocalDate, rev: Int, hour: androidx
             Column {
                 (0 until 24).forEach { h ->
                     Row(Modifier.fillMaxWidth().height(hour).clickable { onNewAt(LocalTime.of(h, 0)) }) {
-                        Text(LocalTime.of(h, 0).format(DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(LocalContext.current)) "HH:mm" else "h a")),
+                        Text(LocalTime.of(h, 0).format(DateTimeFormatter.ofPattern(if (use24(LocalContext.current)) "HH:mm" else "h a")),
                             Modifier.width(56.dp).padding(start = 8.dp), style = MaterialTheme.typography.labelSmall, color = p.secondaryText)
                         HorizontalDivider(Modifier.padding(top = 7.dp), color = p.separator)
                     }
@@ -916,6 +921,24 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
             subtitle = "Bigger days with more events. Tap a day to see its list", icon = WonderIcons.CalendarMonth, tint = Color(0xFF1E7FE8))
         PanelDivider()
         SwitchRow("Show start times", MonthPrefs.times, { MonthPrefs.times = it; MonthPrefs.save(context) }, subtitle = "Like “9 Dentist”, when the days are wide enough (tablets, landscape)", icon = WonderIcons.Schedule, tint = Color(0xFF16A085))
+    }
+    Panel(title = "Time and dates") {
+        var ws by remember { mutableIntStateOf(prefs.getInt("weekStart", 0)) }
+        Column(Modifier.padding(16.dp, 10.dp)) { Text("The week starts on", style = MaterialTheme.typography.labelLarge)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "Automatic", 1 to "Monday", 7 to "Sunday", 6 to "Saturday").forEach { (v, n) -> Chip(n, ws == v, { ws = v; prefs.edit().putInt("weekStart", v).apply(); revision.intValue++ }) } } }
+        PanelDivider()
+        var hrs by remember { mutableIntStateOf(prefs.getInt("hours", 0)) }
+        Column(Modifier.padding(16.dp, 10.dp)) { Text("Clock", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "Follow phone", 12 to "12 hour", 24 to "24 hour").forEach { (v, n) -> Chip(n, hrs == v, { hrs = v; prefs.edit().putInt("hours", v).apply(); revision.intValue++ }) } } }
+    }
+    Panel(title = "New events") {
+        var len by remember { mutableIntStateOf(prefs.getInt("defLen", 60)) }
+        Column(Modifier.padding(16.dp, 10.dp)) { Text("Length", style = MaterialTheme.typography.labelLarge)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(15 to "15 min", 30 to "30 min", 60 to "1 hour", 90 to "90 min", 120 to "2 hours").forEach { (v, n) -> Chip(n, len == v, { len = v; prefs.edit().putInt("defLen", v).apply() }) } } }
+        PanelDivider()
+        var rem by remember { mutableIntStateOf(prefs.getInt("defRem", 15)) }
+        Column(Modifier.padding(16.dp, 10.dp)) { Text("Reminder", style = MaterialTheme.typography.labelLarge)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(-1 to "None", 0 to "At the time", 5 to "5 min", 15 to "15 min", 30 to "30 min", 60 to "1 hour", 1440 to "1 day").forEach { (v, n) -> Chip(n, rem == v, { rem = v; prefs.edit().putInt("defRem", v).apply() }) } } }
     }
     Panel(title = "Notifications") {
         SwitchRow("Event reminders", reminders, { reminders = it; prefs.edit().putBoolean("reminders", it).apply() },

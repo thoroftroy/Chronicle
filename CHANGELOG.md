@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.5.13
+
+- New settings: first day of the week, 12 or 24 hour clock, default length and default reminder for new events
+
 ## v0.5.12
 
 - Loading screens now say what they are doing instead of showing a bare spinner

@@ -52,6 +52,8 @@ data class Task(
 }
 
 class CalendarRepo(private val context: Context) {
+    /** Chronicle's own settings (week start, default event length and reminder, hour format). */
+    fun setting(k: String, d: Int) = context.getSharedPreferences("chronicle", Context.MODE_PRIVATE).getInt(k, d)
     private val cr get() = context.contentResolver
 
     fun calendars(): List<Cal> = runCatching {

@@ -148,7 +148,7 @@ class CountdownWidget : AppWidgetProvider() {
             v.setTextColor(R.id.w_big, cfg.color); v.setTextColor(R.id.w_chrono, cfg.color)
             if (next == null) {
                 v.setTextViewText(R.id.w_label, cfg.label.ifBlank { "COUNTDOWN" })
-                v.setTextViewText(R.id.w_title, if (cfg.eventId != null) "Event not found" else "Nothing coming up"); v.setTextViewText(R.id.w_big, "—")
+                v.setTextViewText(R.id.w_title, if (cfg.eventId != null) "Event not found" else "Nothing coming up"); v.setTextViewText(R.id.w_big, "n/a")
                 v.setTextViewText(R.id.w_when, if (cfg.eventId != null) "Hold the widget to choose another event" else "Add an event in Chronicle")
                 v.setViewVisibility(R.id.w_chrono, View.GONE); v.setViewVisibility(R.id.w_big, View.VISIBLE)
             } else {

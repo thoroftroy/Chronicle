@@ -152,7 +152,7 @@ fun CalendarScreen() {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(10.dp)) {
                         Text(e.title)
-                        Text("$startLabel–$endLabel · ${formatCountdown(System.currentTimeMillis(), e.startMillis)}", style = MaterialTheme.typography.bodySmall)
+                        Text("$startLabel to $endLabel · ${formatCountdown(System.currentTimeMillis(), e.startMillis)}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

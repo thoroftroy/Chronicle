@@ -25,7 +25,7 @@ object QuickAdd {
             val n = m.groupValues[1].toDouble(); minutes = if (m.groupValues[2].lowercase().startsWith("h")) (n * 60).toInt() else n.toInt()
         }
         // Time ranges "3-4pm", "15:00-16:30", single times "at 3pm", "9:30", "noon".
-        take(Regex("\\s(?:at |from )?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\s*(?:-|–|to)\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\s", I))?.let { m ->
+        take(Regex("\\s(?:at |from )?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\s*(?:-|\u2013|to)\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\s", I))?.let { m ->
             val endAp = m.groupValues[6].lowercase(); val startAp = m.groupValues[3].lowercase().ifEmpty { endAp }
             val s = at(m.groupValues[1].toInt(), m.groupValues[2].toIntOrNull() ?: 0, startAp); val e = at(m.groupValues[4].toInt(), m.groupValues[5].toIntOrNull() ?: 0, endAp)
             if (s != null && e != null) { time = s; minutes = ((e.toSecondOfDay() - s.toSecondOfDay()) / 60).let { if (it <= 0) it + 1440 else it } }

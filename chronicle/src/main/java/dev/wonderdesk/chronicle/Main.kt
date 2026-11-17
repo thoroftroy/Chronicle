@@ -437,7 +437,7 @@ private fun OccurrenceRow(o: Occurrence, now: Long, modifier: Modifier, onClick:
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(o.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (o.end < now) p.secondaryText else p.text)
-            Text(listOf(if (o.allDay) "All day" else "${timeText(o.begin)} – ${timeText(o.end)}", o.location).filter { it.isNotBlank() }.joinToString(" · ") + if (o.recurring) "  ↻" else "",
+            Text(listOf(if (o.allDay) "All day" else "${timeText(o.begin)} to ${timeText(o.end)}", o.location).filter { it.isNotBlank() }.joinToString(" · ") + if (o.recurring) "  ↻" else "",
                 style = MaterialTheme.typography.bodySmall, color = p.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(countdown(now, o.begin, o.end), style = MaterialTheme.typography.labelMedium, color = if (now in o.begin until o.end) p.success else p.accent)
@@ -520,7 +520,7 @@ private fun DayPage(repo: CalendarRepo, day: LocalDate, rev: Int, hour: androidx
                         Column(Modifier.offset(x = colW * ci, y = hour * (startMin / 60f) + 8.dp).width(colW - 2.dp).height((hour * ((endMin - startMin) / 60f)).coerceAtLeast(24.dp))
                             .clip(RoundedCornerShape(6.dp)).background(Color(o.color).copy(alpha = .88f)).clickable { onOpen(o) }.padding(6.dp, 3.dp)) {
                             Text(o.title, color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text("${timeText(o.begin)} – ${timeText(o.end)}", color = Color.White.copy(alpha = .85f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            Text("${timeText(o.begin)} to ${timeText(o.end)}", color = Color.White.copy(alpha = .85f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                         }
                     }
                 }
@@ -945,7 +945,7 @@ private fun QuickAddDialog(repo: CalendarRepo, onDismiss: () -> Unit, onDetails:
             if (text.isNotBlank()) Panel {
                 val t = parsed.time
                 ListRow(parsed.title, subtitle = parsed.day.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM")) + " · " +
-                    (if (t == null) "All day" else t.format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT)) + " – " +
+                    (if (t == null) "All day" else t.format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT)) + " to " +
                         t.plusMinutes(parsed.minutes.toLong()).format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))),
                     icon = WonderIcons.Event, tint = p.accent)
             }

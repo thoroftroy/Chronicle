@@ -33,6 +33,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -286,7 +289,7 @@ private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: 
         val grid: @Composable (Modifier) -> Unit = { m ->
             Column(m) {
                 MonthHeader(selected, firstDow, onSelect = { d -> val t = pageOf(YearMonth.from(d)); scope.launch { pager.animateScrollToPage(t) } })
-                androidx.compose.foundation.pager.HorizontalPager(pager, Modifier.weight(1f), beyondBoundsPageCount = 1, key = { it }) { page ->
+                androidx.compose.foundation.pager.HorizontalPager(pager, Modifier.weight(1f).pagerKeys(pager, scope), beyondBoundsPageCount = 1, key = { it }) { page ->
                     val pm = base.plusMonths((page - 1200).toLong())
                     val pStart = pm.atDay(1).let { d -> d.minusDays(((d.dayOfWeek.value - firstDow.value + 7) % 7).toLong()) }
                     val pWeeks = ((java.time.temporal.ChronoUnit.DAYS.between(pStart, pm.atEndOfMonth()) / 7) + 1).toInt()
@@ -482,7 +485,7 @@ private fun DayView(repo: CalendarRepo, day: LocalDate, rev: Int, onDay: (LocalD
             }
             IconButton(onClick = { go(day.plusWeeks(1)) }) { Icon(WonderIcons.NavigateNext, "Next week", tint = p.accent) }
         }
-        androidx.compose.foundation.pager.HorizontalPager(pager, Modifier.fillMaxSize(), beyondBoundsPageCount = 1, key = { it }) { page ->
+        androidx.compose.foundation.pager.HorizontalPager(pager, Modifier.fillMaxSize().pagerKeys(pager, scope), beyondBoundsPageCount = 1, key = { it }) { page ->
             DayPage(repo, base.plusDays((page - 20_000).toLong()), rev, hour, sharedScroll, onOpen, onNewAt)
         }
     }
@@ -996,4 +999,16 @@ private fun QuickAddDialog(repo: CalendarRepo, onDismiss: () -> Unit, onDetails:
             if (r.isSuccess) { toast("Added “${parsed.title}”"); onAdded() } else toast("Couldn't add it: ${r.exceptionOrNull()?.message}")
         }) { Text("Add") }
     }, dismissButton = { TextButton(enabled = text.isNotBlank(), onClick = { onDetails(draft()) }) { Text("More details") } })
+}
+
+/**
+ * Left and right arrow keys flip the page. Without this, Compose searches page after page for something to focus
+ * and, with thousands of months or days to go through, runs the phone out of memory.
+ */
+private fun Modifier.pagerKeys(pager: androidx.compose.foundation.pager.PagerState, scope: kotlinx.coroutines.CoroutineScope): Modifier = this.onPreviewKeyEvent { e ->
+    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && (e.key == androidx.compose.ui.input.key.Key.DirectionRight || e.key == androidx.compose.ui.input.key.Key.DirectionLeft)) {
+        val t = pager.currentPage + if (e.key == androidx.compose.ui.input.key.Key.DirectionRight) 1 else -1
+        if (t in 0 until pager.pageCount) scope.launch { pager.animateScrollToPage(t) }
+        true
+    } else false
 }

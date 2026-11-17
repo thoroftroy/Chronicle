@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.5.17
+
+- Left and right arrow keys flip the month or day instead of searching through thousands of pages, which could run the app out of memory
+
 ## v0.5.16
 
 - New setting: which calendar new events go into

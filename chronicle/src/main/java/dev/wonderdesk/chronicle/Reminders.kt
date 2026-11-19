@@ -51,8 +51,8 @@ object Notify {
         TaskStore(c).all().forEach { t ->
             val pi = PendingIntent.getBroadcast(c, t.id.hashCode(), Intent(c, TaskDueReceiver::class.java).putExtra("id", t.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             am.cancel(pi)
-            val at = if (t.dueHasTime) t.due else if (t.due > 0) LocalDate.ofEpochDay(t.due / 86_400_000L).atTime(9, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() else 0L
-            if (!t.done && at > System.currentTimeMillis()) {
+            val at = TaskLogic.nextAlarm(t)
+            if (at > System.currentTimeMillis()) {
                 // On time to the minute when Alarms & reminders is on; otherwise Android may hold it back a few minutes in battery saving.
                 if (android.os.Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
                 else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
@@ -106,10 +106,13 @@ class TaskDueReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
         val id = intent.getStringExtra("id") ?: return
         val t = TaskStore(c).all().find { it.id == id && !it.done } ?: return
+        // A repeating task that is already finished for today stays quiet, and the next round is booked.
+        if (TaskLogic.doneOn(t, java.time.LocalDate.now())) { Notify.scheduleTasks(c); return }
         Notify.channels(c)
         c.getSystemService(NotificationManager::class.java).notify(id.hashCode(), Notification.Builder(c, Notify.TASKS)
             .setSmallIcon(android.R.drawable.checkbox_on_background).setContentTitle(t.title).setContentText("Due now")
             .setContentIntent(Notify.openApp(c, id.hashCode())).setAutoCancel(true).build())
+        Notify.scheduleTasks(c)
         ChronicleWidget.refresh(c)
     }
 }
@@ -176,8 +179,10 @@ class ChronicleWidget : AppWidgetProvider() {
                     items += Item(o.title, "$dayText $time · ${countdown(now, o.begin, o.end)}", o.color, o.begin)
                 }
             }
-            if (withTasks) TaskStore(c).all().filter { !it.done && it.due > 0 }.sortedBy { it.due }.take(3).forEach { t ->
-                items += Item("☐ " + t.title, "Task due " + LocalDate.ofEpochDay(t.due / 86_400_000L).format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM")), 0xFF2E9E44.toInt(), t.due)
+            if (withTasks) TaskStore(c).all().filter { it.title.isNotBlank() }.mapNotNull { t -> TaskLogic.nextDay(t, today)?.let { d -> t to d } }.sortedBy { it.second }.take(3).forEach { (t, d) ->
+                val at = d.atTime(TaskLogic.dueTime(t) ?: java.time.LocalTime.MIDNIGHT).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val dayText = when (d) { today -> "Today"; today.plusDays(1) -> "Tomorrow"; else -> d.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM")) }
+                items += Item("☐ " + t.title, "Task · " + dayText + (if (t.checklist.isNotEmpty()) " · ${t.checklist.size} items" else ""), 0xFF2E9E44.toInt(), at)
             }
             val shown = items.sortedBy { it.at }.take(5)
             ROWS.forEachIndexed { i, row ->

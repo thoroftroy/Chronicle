@@ -114,6 +114,11 @@ fun ChronicleApp() {
     val tasks = remember { mutableStateListOf<Task>().apply { addAll(TaskStore(context).all()) } }
     fun saveTasks() { TaskStore(context).save(tasks.toList()); Notify.scheduleTasks(context); ChronicleWidget.refresh(context) }
     val toastHolder = remember { mutableStateOf<(String) -> Unit>({}) }
+    val taskToEdit = remember { mutableStateOf<Task?>(null) }
+    fun toggleTaskOn(o: TaskOcc) {
+        val i = tasks.indexOfFirst { it.id == o.task.id }
+        if (i >= 0) { tasks[i] = TaskLogic.setDone(tasks[i], o.day, !o.done); saveTasks() }
+    }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -193,11 +198,11 @@ fun ChronicleApp() {
         }
         val rev = revision.intValue
         when (tab) {
-            "day" -> DayView(repo, day, rev, onDay = { selected = it.toEpochDay() }, onOpen = { o -> repo.load(o.eventId)?.let { editing = it } },
+            "day" -> DayView(repo, day, rev, tasks.toList(), onTask = ::toggleTaskOn, onDay = { selected = it.toEpochDay() }, onOpen = { o -> repo.load(o.eventId)?.let { editing = it } },
                 onNewAt = { t -> editing = newDraft(day, repo, t) })
             "agenda" -> AgendaView(repo, day, rev, searching, tasks, onOpen = { o -> repo.load(o.eventId)?.let { editing = it } })
-            "tasks" -> TasksView(tasks, ::saveTasks)
-            else -> MonthView(repo, day, rev, tasks, onSelect = { selected = it.toEpochDay() }, onOpenDay = { selected = it.toEpochDay(); tab = "day" },
+            "tasks" -> TasksView(tasks, ::saveTasks, taskToEdit)
+            else -> MonthView(repo, day, rev, tasks, onTask = ::toggleTaskOn, onOpenTask = { t -> tab = "tasks"; taskToEdit.value = t }, onSelect = { selected = it.toEpochDay() }, onOpenDay = { selected = it.toEpochDay(); tab = "day" },
                 onOpen = { o -> repo.load(o.eventId)?.let { editing = it } }, onNew = { editing = newDraft(day, repo) })
         }
     }
@@ -259,7 +264,7 @@ object MonthPrefs {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: List<Task>, onSelect: (LocalDate) -> Unit, onOpenDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNew: () -> Unit) {
+private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: List<Task>, onTask: (TaskOcc) -> Unit, onOpenTask: (Task) -> Unit, onSelect: (LocalDate) -> Unit, onOpenDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNew: () -> Unit) {
     val p = wonderPalette()
     val context = LocalContext.current
     LaunchedEffect(Unit) { MonthPrefs.load(context) }
@@ -304,16 +309,16 @@ private fun MonthView(repo: CalendarRepo, selected: LocalDate, rev: Int, tasks: 
             !showList -> grid(Modifier.fillMaxSize())
             landscape -> Row(Modifier.fillMaxSize()) {
                 grid(Modifier.weight(.6f).fillMaxHeight())
-                DayList(selected, today, now, occ, tasks, onOpenDay, onOpen, onNew, Modifier.weight(.4f).fillMaxHeight())
+                DayList(selected, today, now, occ, tasks, onTask, onOpenTask, onOpenDay, onOpen, onNew, Modifier.weight(.4f).fillMaxHeight())
             }
             else -> Column(Modifier.fillMaxSize()) {
                 grid(Modifier.weight(.7f).fillMaxWidth())
-                DayList(selected, today, now, occ, tasks, onOpenDay, onOpen, onNew, Modifier.weight(.3f).fillMaxWidth())
+                DayList(selected, today, now, occ, tasks, onTask, onOpenTask, onOpenDay, onOpen, onNew, Modifier.weight(.3f).fillMaxWidth())
             }
         }
     }
     if (sheet) ModalBottomSheet(onDismissRequest = { sheet = false }, containerColor = p.window) {
-        DayList(selected, today, now, occ, tasks, { sheet = false; onOpenDay(it) }, { sheet = false; onOpen(it) }, { sheet = false; onNew() }, Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 520.dp))
+        DayList(selected, today, now, occ, tasks, onTask, { sheet = false; onOpenTask(it) }, { sheet = false; onOpenDay(it) }, { sheet = false; onOpen(it) }, { sheet = false; onNew() }, Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 520.dp))
     }
 }
 
@@ -336,6 +341,7 @@ private fun MonthHeader(selected: LocalDate, firstDow: DayOfWeek, onSelect: (Loc
 @Composable
 private fun MonthGrid(cells: List<LocalDate>, weeks: Int, ym: YearMonth, selected: LocalDate, today: LocalDate, occ: List<Occurrence>, tasks: List<Task>, modifier: Modifier, onTap: (LocalDate) -> Unit, onDouble: (LocalDate) -> Unit) {
     val p = wonderPalette()
+    val ctx = LocalContext.current
     val density = LocalDensity.current
     val lineDp = with(density) { 15.sp.toDp() }
     BoxWithConstraints(modifier) {
@@ -349,7 +355,8 @@ private fun MonthGrid(cells: List<LocalDate>, weeks: Int, ym: YearMonth, selecte
                         val isSel = d == selected
                         val isToday = d == today
                         val dayOcc = remember(occ, d) { occ.filter { it.covers(d, zone) }.sortedWith(compareByDescending<Occurrence> { it.allDay }.thenBy { it.begin }) }
-                        val dayTasks = remember(tasks.toList(), d) { tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == d } }
+                        val dayTasks = remember(tasks.toList(), d) { TaskLogic.on(tasks, d).filter { !it.done && (it.task.asEvent || !TaskLogic.repeats(it.task)) }.map { it.task } }
+                        val mark = remember(tasks.toList(), d, DayMarks.rev) { DayMarks.iconFor(ctx, DayMarks.manual(ctx), tasks, d, DayMarks.rewardOn(ctx), DayMarks.rewardIcon(ctx)) }
                         val fit = ((cellH - 26.dp) / (lineDp + 2.dp)).toInt().coerceIn(1, 8)
                         val total = dayOcc.size + dayTasks.size
                         val room = if (total > fit) fit - 1 else fit
@@ -357,9 +364,12 @@ private fun MonthGrid(cells: List<LocalDate>, weeks: Int, ym: YearMonth, selecte
                             .background(when { isSel -> p.accent.copy(alpha = .16f); inMonth -> p.panel.copy(alpha = .6f); else -> p.panel.copy(alpha = .18f) })
                             .then(if (isSel) Modifier.border(1.5.dp, p.accent.copy(alpha = .6f), RoundedCornerShape(7.dp)) else Modifier)
                             .clickableWithDouble(d to isSel, onClick = { onTap(d) }, onDouble = { onDouble(d) }).padding(horizontal = 2.dp, vertical = 2.dp)) {
-                            Box(Modifier.align(Alignment.CenterHorizontally).size(22.dp).clip(CircleShape).background(if (isToday) Color(0xFFE5483C) else Color.Transparent), contentAlignment = Alignment.Center) {
-                                Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (isToday || isSel) FontWeight.Bold else FontWeight.Medium),
-                                    color = when { isToday -> Color.White; !inMonth -> p.secondaryText.copy(alpha = .45f); else -> p.text })
+                            Box(Modifier.fillMaxWidth()) {
+                                Box(Modifier.align(Alignment.Center).size(22.dp).clip(CircleShape).background(if (isToday) Color(0xFFE5483C) else Color.Transparent), contentAlignment = Alignment.Center) {
+                                    Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (isToday || isSel) FontWeight.Bold else FontWeight.Medium),
+                                        color = when { isToday -> Color.White; !inMonth -> p.secondaryText.copy(alpha = .45f); else -> p.text })
+                                }
+                                if (mark != null) Text(mark, Modifier.align(Alignment.TopEnd), fontSize = 12.sp, lineHeight = 14.sp)
                             }
                             var used = 0
                             for (o in dayOcc) {
@@ -403,17 +413,23 @@ private fun EventChip(o: Occurrence, day: LocalDate, alpha: Float, times: Boolea
 }
 
 @Composable
-private fun DayList(selected: LocalDate, today: LocalDate, now: Long, occ: List<Occurrence>, tasks: List<Task>, onOpenDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNew: () -> Unit, modifier: Modifier) {
+private fun DayList(selected: LocalDate, today: LocalDate, now: Long, occ: List<Occurrence>, tasks: List<Task>, onTask: (TaskOcc) -> Unit, onOpenTask: (Task) -> Unit, onOpenDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNew: () -> Unit, modifier: Modifier) {
     val p = wonderPalette()
+    val ctx = LocalContext.current
+    var iconDialog by remember { mutableStateOf(false) }
     val dayOcc = occ.filter { it.covers(selected, zone) }.sortedWith(compareByDescending<Occurrence> { it.allDay }.thenBy { it.begin })
-    val dayTasks = tasks.filter { !it.done && it.due > 0 && LocalDate.ofEpochDay(it.due / 86_400_000L) == selected }
+    val dayTasks = TaskLogic.on(tasks, selected).sortedWith(compareBy({ it.done }, { TaskLogic.dueTime(it.task)?.toSecondOfDay() ?: -1 }))
+    val mark = DayMarks.iconFor(ctx, DayMarks.manual(ctx), tasks, selected, DayMarks.rewardOn(ctx), DayMarks.rewardIcon(ctx))
+    @Suppress("UNUSED_EXPRESSION") DayMarks.rev
+    val (doneN, totalN) = TaskLogic.progress(tasks, selected)
     LazyColumn(modifier, state = rememberTabTopList(), contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 16.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)) {
                 Column(Modifier.weight(1f)) {
                     SectionLabel(when (selected) { today -> "Today"; today.plusDays(1) -> "Tomorrow"; today.minusDays(1) -> "Yesterday"; else -> selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM")) })
-                    daysAwayText(selected, today).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = p.secondaryText) }
+                    (daysAwayText(selected, today) + if (totalN > 0) (if (daysAwayText(selected, today).isNotEmpty()) " · " else "") + "$doneN of $totalN tasks done" else daysAwayText(selected, today)).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = p.secondaryText) }
                 }
+                TextButton(onClick = { iconDialog = true }) { Text(mark ?: "☆") }
                 TextButton(onClick = { onOpenDay(selected) }) { Text("Open day") }
                 TextButton(onClick = onNew) { Text("Add") }
             }
@@ -422,9 +438,24 @@ private fun DayList(selected: LocalDate, today: LocalDate, now: Long, occ: List<
             Panel { ListRow("Nothing planned", subtitle = "Tap Add for an event. Tap the date again to open its timeline.", icon = WonderIcons.EventNote, tint = Color(0xFF7A7F87), onClick = onNew) }
         }
         itemsIndexed(dayOcc, key = { i, o -> "o${o.eventId}-${o.begin}-$i" }) { i, o -> OccurrenceRow(o, now, Modifier.panelItem(i, dayOcc.size + dayTasks.size)) { onOpen(o) } }
-        itemsIndexed(dayTasks, key = { i, t -> "t${t.id}-$i" }) { i, t -> ListRow(t.title.ifBlank { "Untitled task" }, Modifier.panelItem(dayOcc.size + i, dayOcc.size + dayTasks.size), subtitle = "Task due",
-            icon = WonderIcons.CheckCircle, tint = p.success) }
+        itemsIndexed(dayTasks, key = { i, o -> "t${o.task.id}-$i" }) { i, o ->
+            Row(Modifier.panelItem(dayOcc.size + i, dayOcc.size + dayTasks.size).clickable { onOpenTask(o.task) }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(24.dp).clip(CircleShape).border(2.dp, if (o.done) p.success else p.panelBorder, CircleShape).background(if (o.done) p.success else Color.Transparent).clickable { onTask(o) }, contentAlignment = Alignment.Center) {
+                    if (o.done) Icon(WonderIcons.Check, "Done", tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(o.task.title.ifBlank { "Untitled task" }, style = MaterialTheme.typography.bodyLarge, color = if (o.done) p.secondaryText else p.text, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        textDecoration = if (o.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
+                    val sub = listOfNotNull(if (o.task.dueHasTime) timeText(o.task.due) else null, TaskLogic.repeatLabel(o.task).takeIf { it.isNotEmpty() }?.let { "↻ $it" }, o.task.list.takeIf { it.isNotBlank() },
+                        o.task.checklist.takeIf { it.isNotEmpty() }?.let { c -> "${c.count { x -> x.id in o.checked }}/${c.size} checked" }).joinToString(" · ")
+                    if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = p.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Text("Task", style = MaterialTheme.typography.labelSmall, color = p.success)
+            }
+        }
     }
+    if (iconDialog) DayIconDialog(selected) { iconDialog = false }
 }
 
 private fun daysAwayText(d: LocalDate, today: LocalDate): String {
@@ -456,7 +487,7 @@ private fun OccurrenceRow(o: Occurrence, now: Long, modifier: Modifier, onClick:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DayView(repo: CalendarRepo, day: LocalDate, rev: Int, onDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNewAt: (LocalTime) -> Unit) {
+private fun DayView(repo: CalendarRepo, day: LocalDate, rev: Int, tasks: List<Task>, onTask: (TaskOcc) -> Unit, onDay: (LocalDate) -> Unit, onOpen: (Occurrence) -> Unit, onNewAt: (LocalTime) -> Unit) {
     val p = wonderPalette()
     val hour = 56.dp
     val density = LocalDensity.current
@@ -486,17 +517,18 @@ private fun DayView(repo: CalendarRepo, day: LocalDate, rev: Int, onDay: (LocalD
             IconButton(onClick = { go(day.plusWeeks(1)) }) { Icon(WonderIcons.NavigateNext, "Next week", tint = p.accent) }
         }
         androidx.compose.foundation.pager.HorizontalPager(pager, Modifier.fillMaxSize().pagerKeys(pager, scope), beyondBoundsPageCount = 1, key = { it }) { page ->
-            DayPage(repo, base.plusDays((page - 20_000).toLong()), rev, hour, sharedScroll, onOpen, onNewAt)
+            DayPage(repo, base.plusDays((page - 20_000).toLong()), rev, tasks, onTask, hour, sharedScroll, onOpen, onNewAt)
         }
     }
 }
 
 @Composable
-private fun DayPage(repo: CalendarRepo, day: LocalDate, rev: Int, hour: androidx.compose.ui.unit.Dp, sharedScroll: MutableIntState, onOpen: (Occurrence) -> Unit, onNewAt: (LocalTime) -> Unit) {
+private fun DayPage(repo: CalendarRepo, day: LocalDate, rev: Int, tasksNow: List<Task>, onTask: (TaskOcc) -> Unit, hour: androidx.compose.ui.unit.Dp, sharedScroll: MutableIntState, onOpen: (Occurrence) -> Unit, onNewAt: (LocalTime) -> Unit) {
     val p = wonderPalette()
     val occ = rememberOccurrences(repo, day.startMs(), day.plusDays(1).startMs(), rev)
     val allDay = occ.filter { it.allDay || (it.begin < day.startMs() && it.end > day.plusDays(1).startMs()) }
     val timed = occ - allDay.toSet()
+    val taskBlocks = TaskLogic.on(tasksNow, day).filter { it.task.asEvent && it.task.dueHasTime }
     val scroll = rememberScrollState(sharedScroll.intValue)
     LaunchedEffect(scroll.value) { sharedScroll.intValue = scroll.value }
     val now = rememberNow(60_000)
@@ -530,6 +562,18 @@ private fun DayPage(repo: CalendarRepo, day: LocalDate, rev: Int, hour: androidx
                             Text(o.title, color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text("${timeText(o.begin)} to ${timeText(o.end)}", color = Color.White.copy(alpha = .85f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                         }
+                    }
+                }
+                // Tasks that are shown as events sit on the timeline too; tap the box to tick them off.
+                taskBlocks.forEach { o ->
+                    val st = TaskLogic.dueTime(o.task)!!.let { it.hour * 60 + it.minute }.toFloat()
+                    val en = (st + o.task.minutes).coerceAtMost(1440f)
+                    Row(Modifier.offset(x = 0.dp, y = hour * (st / 60f) + 8.dp).fillMaxWidth(.5f).height((hour * ((en - st) / 60f)).coerceAtLeast(26.dp)).padding(end = 2.dp)
+                        .clip(RoundedCornerShape(6.dp)).background(p.success.copy(alpha = if (o.done) .45f else .9f)).clickable { onTask(o) }.padding(6.dp, 3.dp), verticalAlignment = Alignment.Top) {
+                        Text(if (o.done) "☑" else "☐", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                        Spacer(Modifier.width(4.dp))
+                        Text(o.task.title, color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            textDecoration = if (o.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
                     }
                 }
                 if (day == LocalDate.now()) {
@@ -571,140 +615,6 @@ private fun AgendaView(repo: CalendarRepo, from: LocalDate, rev: Int, searching:
                 itemsIndexed(list, key = { j, o -> "$d-${o.eventId}-${o.begin}-$j" }) { i, o -> OccurrenceRow(o, now, Modifier.panelItem(i, list.size)) { onOpen(o) } }
             }
         }
-    }
-}
-
-/* ------------------------------------------------ tasks ------------------------------------------- */
-
-@Composable
-private fun TasksView(tasks: MutableList<Task>, save: () -> Unit) {
-    val p = wonderPalette()
-    var showDone by rememberSaveable { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Task?>(null) }
-    LaunchedEffect(tasks.firstOrNull()?.id) { tasks.firstOrNull()?.let { if (it.title.isEmpty()) editing = it } }
-    val today = LocalDate.now()
-    fun dueDay(t: Task) = if (t.due > 0) LocalDate.ofEpochDay(t.due / 86_400_000L) else null
-    val open = tasks.filter { !it.done && it.title.isNotEmpty() }
-    val groups = listOf(
-        "Overdue" to open.filter { dueDay(it)?.isBefore(today) == true },
-        "Today" to open.filter { dueDay(it) == today },
-        "Upcoming" to open.filter { dueDay(it)?.isAfter(today) == true }.sortedBy { it.due },
-        "Someday" to open.filter { it.due == 0L },
-    ).filter { it.second.isNotEmpty() }
-    val done = tasks.filter { it.done }.sortedByDescending { it.completedAt }
-    if (open.isEmpty() && done.isEmpty() && editing == null) {
-        EmptyState("No tasks", "Keep a to-do list with due dates. Tasks also show up in your month view and widget.", icon = WonderIcons.CheckCircle,
-            action = { WButton("New task", { tasks.add(0, Task()); editing = tasks[0] }, icon = WonderIcons.Add, kind = ButtonKind.Primary) })
-    } else LazyColumn(Modifier.fillMaxSize(), state = rememberTabTopList(), contentPadding = PaddingValues(16.dp)) {
-        groups.forEach { (name, list) ->
-            item { SectionLabel(name, Modifier.padding(start = 6.dp, top = 10.dp, bottom = 6.dp)) }
-            itemsIndexed(list.sortedByDescending { it.priority }, key = { _, t -> t.id }) { i, t -> Box(Modifier.animateItemPlacement()) {
-                val r = wonderPalette().panelRadius
-                fun complete() { val idx = tasks.indexOfFirst { it.id == t.id }; if (idx >= 0) { tasks[idx] = t.copy(done = true, completedAt = System.currentTimeMillis()); save() } }
-                // Swipe right to complete, left to push it to tomorrow.
-                SwipeActions(start = SwipeAction("Done", WonderIcons.CheckCircle, Color(0xFF2E9E44), destructive = true) { complete() },
-                    end = SwipeAction("Tomorrow", WonderIcons.Schedule, Color(0xFF1E7FE8)) {
-                        val idx = tasks.indexOfFirst { it.id == t.id }
-                        if (idx >= 0) { val base = java.time.LocalDate.now().plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault())
-                            val keep = if (t.due > 0 && t.dueHasTime) java.time.Instant.ofEpochMilli(t.due).atZone(java.time.ZoneId.systemDefault()).toLocalTime() else java.time.LocalTime.MIDNIGHT
-                            tasks[idx] = t.copy(due = base.with(keep).toInstant().toEpochMilli()); save() }
-                    },
-                    modifier = Modifier.clip(RoundedCornerShape(if (i == 0) r else 0.dp, if (i == 0) r else 0.dp, if (i == list.size - 1) r else 0.dp, if (i == list.size - 1) r else 0.dp))) {
-                    TaskRow(t, Modifier.panelItem(i, list.size), overdue = name == "Overdue", onToggle = { complete() }, onClick = { editing = t })
-                }
-            }}
-        }
-        if (done.isNotEmpty()) {
-            item { Row(Modifier.padding(top = 14.dp)) { WButton(if (showDone) "Hide completed" else "Show completed (${done.size})", { showDone = !showDone }, kind = ButtonKind.Plain) } }
-            if (showDone) itemsIndexed(done, key = { _, t -> "d" + t.id }) { i, t ->
-                TaskRow(t, Modifier.panelItem(i, done.size), overdue = false, onToggle = {
-                    val idx = tasks.indexOfFirst { it.id == t.id }; tasks[idx] = t.copy(done = false); save()
-                }, onClick = { editing = t })
-            }
-        }
-    }
-    editing?.let { t -> TaskEditor(t, onDismiss = {
-        if (t.title.isEmpty()) tasks.removeAll { it.id == t.id && it.title.isEmpty() }
-        editing = null
-    }, onSave = { n -> val i = tasks.indexOfFirst { it.id == n.id }; if (i >= 0) tasks[i] = n else tasks.add(0, n); save(); editing = null },
-        onDelete = { tasks.removeAll { it.id == t.id }; save(); editing = null }) }
-}
-
-@Composable
-private fun TaskRow(t: Task, modifier: Modifier, overdue: Boolean, onToggle: () -> Unit, onClick: () -> Unit) {
-    val p = wonderPalette()
-    Row(modifier.clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(26.dp).clip(CircleShape).border(2.dp, if (t.done) p.success else if (t.priority > 0) p.danger else p.panelBorder, CircleShape)
-            .background(if (t.done) p.success else Color.Transparent).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
-            if (t.done) Icon(WonderIcons.Check, "Done", tint = Color.White, modifier = Modifier.size(16.dp))
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(t.title, style = MaterialTheme.typography.bodyLarge, color = if (t.done) p.secondaryText else p.text,
-                textDecoration = if (t.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
-            val due = if (t.due > 0) {
-                val d = LocalDate.ofEpochDay(t.due / 86_400_000L)
-                d.format(DateTimeFormatter.ofPattern("EEE d MMM")) + if (t.dueHasTime) " " + timeText(t.due) else ""
-            } else ""
-            if (due.isNotEmpty() || t.notes.isNotEmpty()) Text(listOf(due, t.notes.lineSequence().firstOrNull().orEmpty()).filter { it.isNotBlank() }.joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall, color = if (overdue) p.danger else p.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (t.priority > 0) Icon(WonderIcons.Flag, "Important", tint = p.danger, modifier = Modifier.size(18.dp))
-    }
-}
-
-@Composable
-private fun TaskEditor(t: Task, onDismiss: () -> Unit, onSave: (Task) -> Unit, onDelete: () -> Unit) {
-    var title by remember { mutableStateOf(t.title) }
-    var notes by remember { mutableStateOf(t.notes) }
-    var due by remember { mutableLongStateOf(t.due) }
-    var hasTime by remember { mutableStateOf(t.dueHasTime) }
-    var important by remember { mutableStateOf(t.priority > 0) }
-    var pickDate by remember { mutableStateOf(false) }
-    var pickTime by remember { mutableStateOf(false) }
-    val today = LocalDate.now()
-    fun setDay(d: LocalDate?) { due = if (d == null) 0L else if (hasTime) d.atTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(due), zone).toLocalTime()).atZone(zone).toInstant().toEpochMilli() else d.toEpochDay() * 86_400_000L }
-    WonderDialog(onDismissRequest = onDismiss, title = { Text(if (t.title.isEmpty()) "New task" else "Edit task") }, text = {
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Field(title, { title = it }, "Task")
-            Field(notes, { notes = it }, "Notes", singleLine = false, minLines = 2)
-            Text("Due", style = MaterialTheme.typography.titleSmall)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                val dd = if (due > 0) LocalDate.ofEpochDay(due / 86_400_000L) else null
-                Chip("None", due == 0L, { setDay(null); hasTime = false })
-                Chip("Today", dd == today, { setDay(today) }); Chip("Tomorrow", dd == today.plusDays(1), { setDay(today.plusDays(1)) })
-                Chip("Next week", dd == today.plusWeeks(1), { setDay(today.plusWeeks(1)) })
-                Chip(if (dd != null && dd !in listOf(today, today.plusDays(1), today.plusWeeks(1))) dd.format(DateTimeFormatter.ofPattern("d MMM")) else "Pick…", false, { pickDate = true }, WonderIcons.Event)
-            }
-            if (due > 0) Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(hasTime, { on ->
-                    hasTime = on
-                    val d = LocalDate.ofEpochDay(if (t.dueHasTime && !on) LocalDateTime.ofInstant(Instant.ofEpochMilli(due), zone).toLocalDate().toEpochDay() else due / 86_400_000L)
-                    due = if (on) d.atTime(9, 0).atZone(zone).toInstant().toEpochMilli() else d.toEpochDay() * 86_400_000L
-                })
-                Text("At a time" + if (hasTime) " · " + timeText(due) else "", Modifier.clickable(enabled = hasTime) { pickTime = true })
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(important, { important = it }); Text("Important") }
-            if (t.title.isNotEmpty()) WButton("Delete task", onDelete, icon = WonderIcons.Delete, kind = ButtonKind.Plain)
-        }
-    }, confirmButton = {
-        TextButton(enabled = title.isNotBlank(), onClick = {
-            // Keep the day-only convention: due holds epoch-day * 1 day in UTC millis when no time is set.
-            val normalized = if (due > 0 && hasTime && due < 86_400_000L * 100_000) due else due
-            onSave(t.copy(title = title.trim(), notes = notes.trim(), due = normalized, dueHasTime = hasTime && due > 0, priority = if (important) 1 else 0))
-        }) { Text("Save") }
-    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
-    @OptIn(ExperimentalMaterial3Api::class)
-    if (pickDate) {
-        val ds = rememberDatePickerState(initialSelectedDateMillis = if (due > 0) (if (hasTime) LocalDateTime.ofInstant(Instant.ofEpochMilli(due), zone).toLocalDate() else LocalDate.ofEpochDay(due / 86_400_000L)).toEpochDay() * 86_400_000L else null)
-        DatePickerDialog(onDismissRequest = { pickDate = false }, confirmButton = { TextButton(onClick = { ds.selectedDateMillis?.let { setDay(LocalDate.ofEpochDay(it / 86_400_000L)) }; pickDate = false }) { Text("OK") } }) { DatePicker(ds) }
-    }
-    @OptIn(ExperimentalMaterial3Api::class)
-    if (pickTime) {
-        val cur = LocalDateTime.ofInstant(Instant.ofEpochMilli(due), zone)
-        val ts = rememberTimePickerState(cur.hour, cur.minute)
-        WonderDialog(onDismissRequest = { pickTime = false }, title = { Text("Due time") }, text = { TimePicker(ts) },
-            confirmButton = { TextButton(onClick = { due = cur.toLocalDate().atTime(ts.hour, ts.minute).atZone(zone).toInstant().toEpochMilli(); pickTime = false }) { Text("OK") } })
     }
 }
 
@@ -908,6 +818,7 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
     var reminders by remember { mutableStateOf(prefs.getBoolean("reminders", true)) }
     var cals by remember { mutableStateOf(if (granted) repo.calendars() else emptyList()) }
     LaunchedEffect(Unit) { MonthPrefs.load(context) }
+    TaskSettings()
     if (granted) Panel(title = "Calendars", footer = "Calendars come from the accounts on this phone. To add Google Calendar, add your Google account in Android settings; Chronicle syncs through it.") {
         if (cals.isEmpty()) ListRow("No calendars yet", subtitle = "Events you create are saved on this phone")
         cals.forEachIndexed { i, c ->

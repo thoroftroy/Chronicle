@@ -38,16 +38,48 @@ data class EventDraft(
     val location: String = "", val notes: String = "", val rrule: String = "", val reminders: List<Int> = listOf(15),
 )
 
+data class CheckItem(val id: String = UUID.randomUUID().toString().take(8), val text: String, val done: Boolean = false)
+
+/**
+ * A to-do. A task can have a due day (and time), a checklist, a group ("list"), and a repeat rule. A repeating
+ * task is never "used up": which days it was completed on live in [history], and the checklist ticks for each
+ * day in [checks], so the next day starts fresh by itself. With [asEvent] it also shows on the calendar.
+ */
 data class Task(
     val id: String = UUID.randomUUID().toString(), val title: String = "", val notes: String = "",
     val due: Long = 0L, val dueHasTime: Boolean = false, val done: Boolean = false, val priority: Int = 0,
+    /** The group this task sits under, such as "Closing duties" or "Work". */
     val list: String = "", val created: Long = System.currentTimeMillis(), val completedAt: Long = 0L,
+    val checklist: List<CheckItem> = emptyList(),
+    /** "", daily, weekdays, weekly, monthly or yearly. */
+    val repeat: String = "", val every: Int = 1,
+    /** Weekdays for weekly repeats: bit 0 = Monday … bit 6 = Sunday. */
+    val days: Int = 0,
+    /** Epoch day the repeat starts from. */
+    val anchor: Long = 0L,
+    /** Epoch days a repeating task was completed on. */
+    val history: List<Long> = emptyList(),
+    /** Epoch day to the checklist items ticked that day (repeating tasks). */
+    val checks: Map<Long, List<String>> = emptyMap(),
+    val asEvent: Boolean = false, val minutes: Int = 60,
 ) {
     fun toJson() = JSONObject().put("id", id).put("title", title).put("notes", notes).put("due", due).put("dueHasTime", dueHasTime)
         .put("done", done).put("priority", priority).put("list", list).put("created", created).put("completedAt", completedAt)
+        .put("checklist", JSONArray(checklist.map { JSONObject().put("id", it.id).put("text", it.text).put("done", it.done) }))
+        .put("repeat", repeat).put("every", every).put("days", days).put("anchor", anchor)
+        .put("history", JSONArray(history.takeLast(800)))
+        .put("checks", JSONObject().also { o -> checks.entries.sortedBy { it.key }.takeLast(60).forEach { (d, ids) -> o.put(d.toString(), JSONArray(ids)) } })
+        .put("asEvent", asEvent).put("minutes", minutes)
     companion object {
-        fun from(o: JSONObject) = Task(o.getString("id"), o.optString("title"), o.optString("notes"), o.optLong("due"), o.optBoolean("dueHasTime"),
-            o.optBoolean("done"), o.optInt("priority"), o.optString("list"), o.optLong("created"), o.optLong("completedAt"))
+        fun from(o: JSONObject): Task {
+            val cl = o.optJSONArray("checklist")?.let { a -> (0 until a.length()).map { a.getJSONObject(it).let { c -> CheckItem(c.optString("id").ifBlank { UUID.randomUUID().toString().take(8) }, c.optString("text"), c.optBoolean("done")) } } } ?: emptyList()
+            val hist = o.optJSONArray("history")?.let { a -> (0 until a.length()).map { a.getLong(it) } } ?: emptyList()
+            val ch = o.optJSONObject("checks")?.let { c -> c.keys().asSequence().associate { k -> k.toLong() to (c.getJSONArray(k).let { a -> (0 until a.length()).map { a.getString(it) } }) } } ?: emptyMap()
+            return Task(o.getString("id"), o.optString("title"), o.optString("notes"), o.optLong("due"), o.optBoolean("dueHasTime"),
+                o.optBoolean("done"), o.optInt("priority"), o.optString("list"), o.optLong("created"), o.optLong("completedAt"),
+                cl, o.optString("repeat"), o.optInt("every", 1).coerceAtLeast(1), o.optInt("days"), o.optLong("anchor"), hist, ch,
+                o.optBoolean("asEvent"), o.optInt("minutes", 60))
+        }
     }
 }
 

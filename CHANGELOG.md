@@ -1,5 +1,14 @@
 # Chronicle changelog
 
+## v0.5.18
+
+- Repeating tasks: daily, weekdays, weekly (pick the days), monthly or yearly, every 1 to 30 of them. A repeating task is never used up: it is ticked off for today and comes back fresh tomorrow
+- Checklists inside a task: a "Closing duties" task that repeats every day with its own list, ticked off per day. Tick the last item and the day is done; untick one and it reopens
+- Groups: give tasks a group such as Work or Closing duties and switch the Tasks tab between By date and By group
+- Tasks with a time can show on the calendar like events: as a box on the day timeline you can tick off, and on the month grid
+- Icons on days: tap the star beside the date to put a star, heart or any other icon on a day. Days where every task that came up was finished get a reward icon by themselves (choose it, or turn it off, in Settings). The Tasks tab shows today's progress with a bar
+- Tasks of the day now show in the month view's day list with their own tick box and checklist progress, and reminders and the widget follow each repeat
+
 ## v0.5.17
 
 - Left and right arrow keys flip the month or day instead of searching through thousands of pages, which could run the app out of memory

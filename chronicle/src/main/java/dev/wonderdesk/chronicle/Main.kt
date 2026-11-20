@@ -164,11 +164,10 @@ fun ChronicleApp() {
         },
         actions = {
             if (tab != "tasks") {
-                TextButton(onClick = { selected = LocalDate.now().toEpochDay() }) { Text("Today", color = wonderPalette().toolbarText, style = MaterialTheme.typography.titleSmall) }
+                ToolbarButton(WonderIcons.Today, "Today", { selected = LocalDate.now().toEpochDay() })
                 ToolbarButton(WonderIcons.Event, "Go to date", { jump = true })
             }
             if (tab == "agenda") ToolbarButton(WonderIcons.Search, "Search events", { searching = !searching })
-            if (tab != "tasks") ToolbarButton(WonderIcons.Bolt, "Quick add", { quick = true })
             ToolbarButton(WonderIcons.Add, if (tab == "tasks") "New task" else "New event", {
                 if (tab == "tasks") { tasks.add(0, Task(title = "")); } else editing = newDraft(day, repo)
             })

@@ -1,5 +1,10 @@
 # Chronicle changelog
 
+## v0.5.19
+
+- Removed the Quick add button and turned Today into an icon, so the month and date in the top bar are no longer cut off
+- New app icon without a date painted on it. The Wonderdesk Launcher draws today's real date on it
+
 ## v0.5.18
 
 - Repeating tasks: daily, weekdays, weekly (pick the days), monthly or yearly, every 1 to 30 of them. A repeating task is never used up: it is ticked off for today and comes back fresh tomorrow

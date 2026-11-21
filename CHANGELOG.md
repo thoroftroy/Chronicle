@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.5.20
+
+- Fixed a gap above the keyboard in screens with a bottom tab bar: the tab bar now steps aside while you type, so you can see what you are writing
+
 ## v0.5.19
 
 - Removed the Quick add button and turned Today into an icon, so the month and date in the top bar are no longer cut off

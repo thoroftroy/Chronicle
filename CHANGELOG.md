@@ -1,5 +1,11 @@
 # Chronicle changelog
 
+## v0.6.0
+
+- The animated background now follows the month you are looking at: icy blue with snowflakes in January, pink hearts in February, fresh greens and flowers through spring, warm sunshine and fireworks in summer, falling leaves in autumn and festive red with stars in December. Months that have passed look faded, like a memory
+- Ticking off a task sends a little burst of ticks and stars up through the background
+- Fixed the line under the selected day saying "in 30 days" twice when the day has no tasks
+
 ## v0.5.25
 
 - The symbols drifting in the background are smaller and fainter so they no longer crowd text; selected segments and chips are readable in every look (including Super); the warning banner at the top has a solid backing so its text is easy to read

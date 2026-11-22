@@ -53,7 +53,7 @@ fun TasksView(tasks: MutableList<Task>, save: () -> Unit, openRequest: MutableSt
     val today = LocalDate.now()
 
     fun replace(n: Task) { val i = tasks.indexOfFirst { it.id == n.id }; if (i >= 0) { tasks[i] = n; save() } }
-    fun complete(o: TaskOcc, on: Boolean) = replace(TaskLogic.setDone(o.task, o.day, on))
+    fun complete(o: TaskOcc, on: Boolean) { replace(TaskLogic.setDone(o.task, o.day, on)); if (on) WonderMood.celebrate(TASK_DONE_GLYPHS) }
     fun tick(o: TaskOcc, item: String) = replace(TaskLogic.toggleCheck(o.task, o.day, item))
 
     val real = tasks.filter { it.title.isNotEmpty() }

@@ -94,6 +94,32 @@ private fun timeText(ms: Long) = DateFormat.getTimeInstance(DateFormat.SHORT).fo
 /** Bumped whenever the calendar changes so every view re-reads. */
 private val revision = mutableIntStateOf(0)
 
+internal val TASK_DONE_GLYPHS = listOf("✓", "✦", "★", "✓")
+
+/**
+ * The feel of each month in the scene behind Chronicle: icy blue and snowflakes in January, pink hearts in February, fresh greens and
+ * flowers through spring, sunshine and fireworks in summer, falling leaves in autumn and red with stars in December.
+ */
+internal fun monthMood(m: YearMonth, now: YearMonth): SceneMood {
+    data class Season(val hue: Float, val glyphs: List<String>, val tint: Int, val energy: Float)
+    val s = when (m.monthValue) {
+        1 -> Season(205f, listOf("❄", "❅", "✧", "*", "❆"), android.graphics.Color.argb(138, 190, 225, 255), .7f)
+        2 -> Season(335f, listOf("♥", "❤", "✿", "♡"), android.graphics.Color.argb(120, 255, 150, 190), .9f)
+        3 -> Season(118f, listOf("☘", "✿", "❀", "•"), android.graphics.Color.argb(110, 150, 230, 140), 1f)
+        4 -> Season(150f, listOf("☂", "✿", "❀", "💧", "•"), android.graphics.Color.argb(110, 140, 220, 200), 1.1f)
+        5 -> Season(92f, listOf("❀", "✿", "✾", "❁", "•"), android.graphics.Color.argb(110, 200, 240, 120), 1.15f)
+        6 -> Season(52f, listOf("☀", "✦", "✿", "•"), android.graphics.Color.argb(102, 255, 230, 120), 1.2f)
+        7 -> Season(30f, listOf("☀", "✸", "★", "✦", "✺"), android.graphics.Color.argb(114, 255, 180, 90), 1.3f)
+        8 -> Season(42f, listOf("☀", "≈", "✦", "⛱"), android.graphics.Color.argb(102, 255, 200, 110), 1.15f)
+        9 -> Season(36f, listOf("❦", "✎", "✦", "•"), android.graphics.Color.argb(110, 240, 180, 90), 1f)
+        10 -> Season(22f, listOf("❦", "☾", "✦", "🍂", "✧"), android.graphics.Color.argb(120, 255, 140, 50), 1f)
+        11 -> Season(14f, listOf("❦", "🍂", "☁", "•"), android.graphics.Color.argb(108, 190, 110, 60), .85f)
+        else -> Season(355f, listOf("❄", "★", "✦", "❅", "✧"), android.graphics.Color.argb(108, 220, 40, 50), .9f)
+    }
+    val past = m.isBefore(now)
+    return SceneMood(hue = s.hue, tint = s.tint, energy = if (past) s.energy * .6f else s.energy, glyphs = s.glyphs, hush = if (past) .35f else 0f)
+}
+
 @Composable
 fun ChronicleApp() {
     val context = LocalContext.current
@@ -117,8 +143,11 @@ fun ChronicleApp() {
     val taskToEdit = remember { mutableStateOf<Task?>(null) }
     fun toggleTaskOn(o: TaskOcc) {
         val i = tasks.indexOfFirst { it.id == o.task.id }
-        if (i >= 0) { tasks[i] = TaskLogic.setDone(tasks[i], o.day, !o.done); saveTasks() }
+        if (i >= 0) { tasks[i] = TaskLogic.setDone(tasks[i], o.day, !o.done); saveTasks(); if (!o.done) WonderMood.celebrate(TASK_DONE_GLYPHS) }
     }
+    // The scene takes on the season of the month you are looking at; past months look faded, like a memory.
+    val shownMonth = YearMonth.from(day)
+    SceneMoodEffect(remember(shownMonth) { monthMood(shownMonth, YearMonth.now()) })
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -426,7 +455,7 @@ private fun DayList(selected: LocalDate, today: LocalDate, now: Long, occ: List<
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)) {
                 Column(Modifier.weight(1f)) {
                     SectionLabel(when (selected) { today -> "Today"; today.plusDays(1) -> "Tomorrow"; today.minusDays(1) -> "Yesterday"; else -> selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM")) })
-                    (daysAwayText(selected, today) + if (totalN > 0) (if (daysAwayText(selected, today).isNotEmpty()) " · " else "") + "$doneN of $totalN tasks done" else daysAwayText(selected, today)).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = p.secondaryText) }
+                    listOfNotNull(daysAwayText(selected, today).takeIf { it.isNotEmpty() }, if (totalN > 0) "$doneN of $totalN tasks done" else null).joinToString(" · ").takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = p.secondaryText) }
                 }
                 TextButton(onClick = { iconDialog = true }) { Text(mark ?: "☆") }
                 TextButton(onClick = { onOpenDay(selected) }) { Text("Open day") }

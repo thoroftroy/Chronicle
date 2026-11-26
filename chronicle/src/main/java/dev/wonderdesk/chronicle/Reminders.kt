@@ -1,6 +1,8 @@
 package dev.wonderdesk.chronicle
 
 import android.Manifest
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -49,9 +51,11 @@ object Notify {
     fun scheduleTasks(c: Context) {
         val am = c.getSystemService(AlarmManager::class.java)
         TaskStore(c).all().forEach { t ->
-            val pi = PendingIntent.getBroadcast(c, t.id.hashCode(), Intent(c, TaskDueReceiver::class.java).putExtra("id", t.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            am.cancel(pi)
-            val at = TaskLogic.nextAlarm(t)
+            am.cancel(PendingIntent.getBroadcast(c, t.id.hashCode(), Intent(c, TaskDueReceiver::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            val r = TaskLogic.nextReminder(t) ?: return@forEach
+            val at = r.at
+            val pi = PendingIntent.getBroadcast(c, t.id.hashCode(), Intent(c, TaskDueReceiver::class.java).putExtra("id", t.id).putExtra("day", r.day.toEpochDay())
+                .putExtra("kind", r.kind).putExtra("minutes", r.minutes), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             if (at > System.currentTimeMillis()) {
                 // On time to the minute when Alarms & reminders is on; otherwise Android may hold it back a few minutes in battery saving.
                 if (android.os.Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
@@ -105,16 +109,59 @@ class EventReminderReceiver : BroadcastReceiver() {
 class TaskDueReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
         val id = intent.getStringExtra("id") ?: return
-        val t = TaskStore(c).all().find { it.id == id && !it.done } ?: return
-        // A repeating task that is already finished for today stays quiet, and the next round is booked.
-        if (TaskLogic.doneOn(t, java.time.LocalDate.now())) { Notify.scheduleTasks(c); return }
+        val store = TaskStore(c)
+        var t = store.all().find { it.id == id && !(it.done && !TaskLogic.repeats(it)) } ?: return
+        val day = intent.getLongExtra("day", Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }?.let { java.time.LocalDate.ofEpochDay(it) } ?: java.time.LocalDate.now()
+        val kind = intent.getStringExtra("kind") ?: "due"; val minutes = intent.getIntExtra("minutes", 0)
+        if (kind == "later") { t = t.copy(later = 0L); store.save(store.all().map { if (it.id == id) t else it }) }
+        // A round that is already finished stays quiet, and the next reminder is booked.
+        if (TaskLogic.doneOn(t, day)) { Notify.scheduleTasks(c); return }
         Notify.channels(c)
+        val dueClock = TaskLogic.dueTime(t)?.let { java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT).format(it) }
+        val whenText = when (kind) {
+            "before" -> "Due in " + TaskLogic.span(minutes) + (dueClock?.let { " (at $it)" } ?: "")
+            "nag" -> "Overdue by " + TaskLogic.span(minutes) + " · still to do"
+            "later" -> "Reminder" + (dueClock?.let { " · was due at $it" } ?: "")
+            else -> if (dueClock != null) "Due now · $dueClock" else "Due today"
+        }
+        val text = listOf(whenText, t.notes.lineSequence().firstOrNull().orEmpty()).filter { it.isNotBlank() }.joinToString("\n")
+        fun act(a: String, code: Int) = PendingIntent.getBroadcast(c, id.hashCode() + code, Intent(c, TaskActionReceiver::class.java).setAction(a).putExtra("id", id).putExtra("day", day.toEpochDay()),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         c.getSystemService(NotificationManager::class.java).notify(id.hashCode(), Notification.Builder(c, Notify.TASKS)
-            .setSmallIcon(android.R.drawable.checkbox_on_background).setContentTitle(t.title).setContentText("Due now")
+            .setSmallIcon(android.R.drawable.checkbox_on_background).setContentTitle(t.title).setContentText(whenText)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .addAction(Notification.Action.Builder(null, "Done", act(TaskActionReceiver.DONE, 1)).build())
+            .addAction(Notification.Action.Builder(null, "Later (1 hour)", act(TaskActionReceiver.LATER, 2)).build())
             .setContentIntent(Notify.openApp(c, id.hashCode())).setAutoCancel(true).build())
         Notify.scheduleTasks(c)
         ChronicleWidget.refresh(c)
     }
+}
+
+/** Done and Later on a task notification. */
+class TaskActionReceiver : BroadcastReceiver() {
+    companion object { const val DONE = "dev.wonderdesk.chronicle.TASK_DONE"; const val LATER = "dev.wonderdesk.chronicle.TASK_LATER" }
+    override fun onReceive(c: Context, intent: Intent) {
+        val id = intent.getStringExtra("id") ?: return
+        val day = java.time.LocalDate.ofEpochDay(intent.getLongExtra("day", java.time.LocalDate.now().toEpochDay()))
+        val store = TaskStore(c)
+        store.save(store.all().map { t -> if (t.id != id) t else when (intent.action) {
+            DONE -> TaskLogic.setDone(t, day, true)
+            LATER -> t.copy(later = System.currentTimeMillis() + 3_600_000L)
+            else -> t
+        } })
+        c.getSystemService(NotificationManager::class.java).cancel(id.hashCode())
+        Notify.scheduleTasks(c)
+        ChronicleWidget.refresh(c)
+        TaskStoreEvents.changed()
+    }
+}
+
+/** Lets an open Tasks screen reload when a notification button changes a task. */
+object TaskStoreEvents {
+    var rev by androidx.compose.runtime.mutableIntStateOf(0)
+    fun changed() { android.os.Handler(android.os.Looper.getMainLooper()).post { rev++ } }
 }
 
 class ChronicleBootReceiver : BroadcastReceiver() {

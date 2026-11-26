@@ -153,7 +153,7 @@ private fun TaskRow(o: TaskOcc, modifier: Modifier, overdue: Boolean, showDay: B
                 val dayPart = if (showDay || TaskLogic.dueDay(t) != null && !TaskLogic.repeats(t)) {
                     dayText(o.day, today) + (TaskLogic.dueTime(t)?.let { " " + clock(t.due) } ?: "")
                 } else TaskLogic.dueTime(t)?.let { clock(t.due) } ?: ""
-                val bits = listOf(dayPart, TaskLogic.repeatLabel(t).let { if (it.isNotEmpty()) "↻ $it" else "" }, t.list.takeIf { it.isNotBlank() && showDay } ?: "", t.notes.lineSequence().firstOrNull().orEmpty()).filter { it.isNotBlank() }
+                val bits = listOf(dayPart, TaskLogic.repeatLabel(t).let { if (it.isNotEmpty()) "↻ $it" else "" }, if (t.nag > 0 && !TaskLogic.doneOn(t, o.day)) "🔔 every " + TaskLogic.span(t.nag) else "", t.list.takeIf { it.isNotBlank() && showDay } ?: "", t.notes.lineSequence().firstOrNull().orEmpty()).filter { it.isNotBlank() }
                 if (bits.isNotEmpty()) Text(bits.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = if (overdue) p.danger else p.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (t.checklist.isNotEmpty()) {
@@ -229,6 +229,9 @@ fun TaskEditor(t: Task, groups: List<String>, onDismiss: () -> Unit, onSave: (Ta
     var days by remember { mutableIntStateOf(t.days) }
     var asEvent by remember { mutableStateOf(t.asEvent) }
     var minutes by remember { mutableIntStateOf(t.minutes) }
+    val remind = remember { mutableStateListOf<Int>().apply { addAll(t.remind) } }
+    var nag by remember { mutableIntStateOf(t.nag) }
+    var custom by remember { mutableStateOf<String?>(null) }   // "before" or "nag" while the custom amount dialog is open
     val items = remember { mutableStateListOf<CheckItem>().apply { addAll(t.checklist) } }
     var newItem by remember { mutableStateOf("") }
     var pickDate by remember { mutableStateOf(false) }
@@ -259,6 +262,29 @@ fun TaskEditor(t: Task, groups: List<String>, onDismiss: () -> Unit, onSave: (Ta
                     if (!on) asEvent = false
                 })
                 Text("At a time" + if (hasTime) " · " + clock(due) else "", Modifier.clickable(enabled = hasTime) { pickTime = true })
+            }
+
+            if (due > 0) {
+                Text("Reminders", style = MaterialTheme.typography.titleSmall)
+                Text(if (hasTime) "How long before it is due. Pick as many as you like." else "Tasks without a time count from 9:00. Pick as many as you like.",
+                    style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val presets = listOf(0, 5, 15, 30, 60, 120, 1440, 10080)
+                    (presets + remind.filter { it !in presets }.sorted()).forEach { m ->
+                        Chip(if (m == 0) "At the time" else TaskLogic.span(m).replace(" minutes", " min").replace(" minute", " min"), m in remind,
+                            { if (m in remind) remind.remove(m) else remind.add(m) })
+                    }
+                    Chip("Custom…", false, { custom = "before" }, WonderIcons.Add)
+                }
+                Text("Keep reminding until it's done", style = MaterialTheme.typography.titleSmall)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val presets = listOf(15, 30, 60, 120, 240)
+                    Chip("Off", nag == 0, { nag = 0 })
+                    (presets + listOfNotNull(nag.takeIf { it > 0 && it !in presets })).forEach { m -> Chip("Every " + TaskLogic.span(m).replace(" minutes", " min"), nag == m, { nag = m }) }
+                    Chip("Custom…", false, { custom = "nag" }, WonderIcons.Add)
+                }
+                Text(if (nag > 0) "After it is due, a reminder every ${TaskLogic.span(nag)} until you tick it off. Quiet from 11 PM to 7 AM." else "Each reminder has Done and Later buttons.",
+                    style = MaterialTheme.typography.bodySmall, color = p.secondaryText)
             }
 
             Text("Repeat", style = MaterialTheme.typography.titleSmall)
@@ -315,9 +341,24 @@ fun TaskEditor(t: Task, groups: List<String>, onDismiss: () -> Unit, onSave: (Ta
                 checklist = items.toList().let { l -> if (repeat.isNotEmpty()) l.map { it.copy(done = false) } else l },
                 repeat = repeat, every = every, days = if (repeat == "weekly") days else 0, anchor = if (keep && t.anchor > 0) t.anchor else anchor,
                 history = if (keep) t.history else emptyList(), checks = if (keep) t.checks else emptyMap(), asEvent = asEvent && hasTime && due > 0, minutes = minutes,
+                remind = remind.distinct().sorted(), nag = nag, later = if (due != t.due) 0L else t.later,
                 done = if (repeat.isNotEmpty()) false else t.done))
         }) { Text("Save") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    custom?.let { what ->
+        var amount by remember { mutableStateOf("") }
+        var unit by remember { mutableIntStateOf(if (what == "nag") 0 else 1) }
+        val mins = (amount.toIntOrNull() ?: 0) * listOf(1, 60, 1440)[unit]
+        WonderDialog(onDismissRequest = { custom = null }, title = { Text(if (what == "nag") "Remind again every" else "Remind me before it's due") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Field(amount, { v -> amount = v.filter { it.isDigit() }.take(4) }, "How many", keyboard = androidx.compose.ui.text.input.KeyboardType.Number)
+                Segmented(listOf("Minutes", "Hours", "Days"), unit) { unit = it }
+                if (mins > 0) Text(if (what == "nag") "Every ${TaskLogic.span(mins)} until done" else "${TaskLogic.span(mins)} before", color = p.secondaryText, style = MaterialTheme.typography.bodyMedium)
+            }
+        }, confirmButton = {
+            TextButton(enabled = mins in 1..(60 * 24 * 60), onClick = { if (what == "nag") nag = mins else if (mins !in remind) remind.add(mins); custom = null }) { Text("Add") }
+        }, dismissButton = { TextButton(onClick = { custom = null }) { Text("Cancel") } })
+    }
     @OptIn(ExperimentalMaterial3Api::class)
     if (pickDate) {
         val ds = rememberDatePickerState(initialSelectedDateMillis = dayOf()?.toEpochDay()?.times(86_400_000L))

@@ -73,16 +73,63 @@ object TaskLogic {
     }
 
     /** When the next reminder should ring, in epoch millis (9:00 for tasks without a time), or 0. */
-    fun nextAlarm(t: Task, after: Long = System.currentTimeMillis()): Long {
-        if (t.title.isBlank()) return 0L
+    fun nextAlarm(t: Task, after: Long = System.currentTimeMillis()): Long = nextReminder(t, after)?.at ?: 0L
+
+    /** One reminder: when it rings, for which day's round of the task, and what kind it is. */
+    data class Reminder(val at: Long, val day: LocalDate, val kind: String, val minutes: Int)
+
+    /** Nags stay quiet from 23:00 to 7:00 and pick up again in the morning. */
+    private fun quiet(at: Long): Boolean = Instant.ofEpochMilli(at).atZone(zoneId).hour.let { it >= 23 || it < 7 }
+
+    /**
+     * The next reminder after [after]: the ones set before the due time, the due time itself, "Later" from a notification,
+     * and with [Task.nag] a repeat every so often until it is ticked off (for a repeating task, until its next round; for a one-off, up to a week).
+     */
+    fun nextReminder(t: Task, after: Long = System.currentTimeMillis()): Reminder? {
+        if (t.title.isBlank()) return null
         val time = dueTime(t) ?: LocalTime.of(9, 0)
-        var d = nextDay(t, Instant.ofEpochMilli(after).atZone(zoneId).toLocalDate()) ?: return 0L
-        repeat(3) {
-            val at = d.atTime(time).atZone(zoneId).toInstant().toEpochMilli()
-            if (at > after) return at
-            d = if (repeats(t)) (nextDay(t, d.plusDays(1)) ?: return 0L) else return 0L
+        val today = Instant.ofEpochMilli(after).atZone(zoneId).toLocalDate()
+        val found = ArrayList<Reminder>()
+        if (t.later > after && !(t.done && !repeats(t))) found += Reminder(t.later, nextDay(t, today) ?: today, "later", 0)
+        // Rounds still to do: an overdue one-off, today's (if not finished), and the next few, since "a day before" rings before its round.
+        val rounds = ArrayList<LocalDate>()
+        if (!repeats(t)) { if (!t.done) dueDay(t)?.let { rounds += it } }
+        else {
+            var d: LocalDate? = nextDay(t, today.minusDays(1))
+            while (d != null && rounds.size < 4) { if (!doneOn(t, d)) rounds += d; d = nextDay(t, d.plusDays(1)) }
         }
-        return 0L
+        rounds.forEachIndexed { i, d ->
+            val due = d.atTime(time).atZone(zoneId).toInstant().toEpochMilli()
+            t.remind.forEach { m -> val at = due - m * 60_000L; if (at > after) found += Reminder(at, d, if (m == 0) "due" else "before", m) }
+            if (t.nag > 0) {
+                val until = if (repeats(t)) rounds.getOrNull(i + 1)?.atTime(time)?.atZone(zoneId)?.toInstant()?.toEpochMilli() ?: (due + 86_400_000L) else due + 7 * 86_400_000L
+                val step = t.nag * 60_000L
+                var at = if (after <= due) due + step else due + ((after - due) / step + 1) * step
+                while (at < until && quiet(at)) at += step
+                if (at < until) found += Reminder(at, d, "nag", ((at - due) / 60_000L).toInt())
+            }
+        }
+        return found.minByOrNull { it.at }
+    }
+
+    /** "15 minutes", "2 hours", "1 day", "1 week". */
+    fun span(minutes: Int): String {
+        fun u(n: Int, w: String) = "$n $w" + if (n == 1) "" else "s"
+        return when {
+            minutes % 10080 == 0 -> u(minutes / 10080, "week")
+            minutes % 1440 == 0 -> u(minutes / 1440, "day")
+            minutes % 60 == 0 -> u(minutes / 60, "hour")
+            minutes > 60 -> "${minutes / 60} h ${minutes % 60} min"
+            else -> u(minutes, "minute")
+        }
+    }
+
+    /** Words for the editor and the task list: "At the time, 1 day before · then every 30 minutes until done". */
+    fun reminderLabel(t: Task): String {
+        if (t.remind.isEmpty() && t.nag == 0) return "No reminders"
+        val before = t.remind.sorted().joinToString(", ") { if (it == 0) "at the time" else span(it) + " before" }.replaceFirstChar { it.uppercase() }
+        val nag = if (t.nag > 0) "every ${span(t.nag)} until done" else ""
+        return listOf(before, nag).filter { it.isNotBlank() }.joinToString(" · then ").replaceFirstChar { it.uppercase() }
     }
 
     /** Marks a day done or not done. */

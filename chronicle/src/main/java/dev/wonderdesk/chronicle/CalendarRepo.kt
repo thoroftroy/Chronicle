@@ -62,6 +62,12 @@ data class Task(
     /** Epoch day to the checklist items ticked that day (repeating tasks). */
     val checks: Map<Long, List<String>> = emptyMap(),
     val asEvent: Boolean = false, val minutes: Int = 60,
+    /** Reminders, in minutes before the due time (0 = at the time). Tasks without a time count from 9:00. Empty = no reminders. */
+    val remind: List<Int> = listOf(0),
+    /** Keep reminding every this many minutes after it is due until it is ticked off (0 = once). Quiet overnight. */
+    val nag: Int = 0,
+    /** "Later" from a notification: one extra reminder at this moment. */
+    val later: Long = 0L,
 ) {
     fun toJson() = JSONObject().put("id", id).put("title", title).put("notes", notes).put("due", due).put("dueHasTime", dueHasTime)
         .put("done", done).put("priority", priority).put("list", list).put("created", created).put("completedAt", completedAt)
@@ -70,6 +76,7 @@ data class Task(
         .put("history", JSONArray(history.takeLast(800)))
         .put("checks", JSONObject().also { o -> checks.entries.sortedBy { it.key }.takeLast(60).forEach { (d, ids) -> o.put(d.toString(), JSONArray(ids)) } })
         .put("asEvent", asEvent).put("minutes", minutes)
+        .put("remind", JSONArray(remind)).put("nag", nag).put("later", later)
     companion object {
         fun from(o: JSONObject): Task {
             val cl = o.optJSONArray("checklist")?.let { a -> (0 until a.length()).map { a.getJSONObject(it).let { c -> CheckItem(c.optString("id").ifBlank { UUID.randomUUID().toString().take(8) }, c.optString("text"), c.optBoolean("done")) } } } ?: emptyList()
@@ -78,7 +85,8 @@ data class Task(
             return Task(o.getString("id"), o.optString("title"), o.optString("notes"), o.optLong("due"), o.optBoolean("dueHasTime"),
                 o.optBoolean("done"), o.optInt("priority"), o.optString("list"), o.optLong("created"), o.optLong("completedAt"),
                 cl, o.optString("repeat"), o.optInt("every", 1).coerceAtLeast(1), o.optInt("days"), o.optLong("anchor"), hist, ch,
-                o.optBoolean("asEvent"), o.optInt("minutes", 60))
+                o.optBoolean("asEvent"), o.optInt("minutes", 60),
+                o.optJSONArray("remind")?.let { a -> (0 until a.length()).map { a.getInt(it) }.distinct().sorted() } ?: listOf(0), o.optInt("nag"), o.optLong("later"))
         }
     }
 }

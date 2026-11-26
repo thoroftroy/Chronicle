@@ -139,6 +139,9 @@ fun ChronicleApp() {
     var importing by remember { mutableStateOf<List<EventDraft>?>(null) }
     val tasks = remember { mutableStateListOf<Task>().apply { addAll(TaskStore(context).all()) } }
     fun saveTasks() { TaskStore(context).save(tasks.toList()); Notify.scheduleTasks(context); ChronicleWidget.refresh(context) }
+    // Done or Later pressed on a task notification while Chronicle is open: pick up the change instead of saving over it.
+    val taskRev = TaskStoreEvents.rev
+    LaunchedEffect(taskRev) { if (taskRev > 0) { val fresh = withContext(Dispatchers.IO) { TaskStore(context).all() }; tasks.clear(); tasks.addAll(fresh) } }
     val toastHolder = remember { mutableStateOf<(String) -> Unit>({}) }
     val taskToEdit = remember { mutableStateOf<Task?>(null) }
     fun toggleTaskOn(o: TaskOcc) {

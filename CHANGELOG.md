@@ -1,5 +1,15 @@
 # Chronicle changelog
 
+## v0.7.0
+
+- In Tasks the background has a calendar page for each task still to do today; ticking one off stamps a page with a tick and it falls away, and a green tide shows how much of today is done
+- The background answers your finger: a tap sends rings out and pops what it lands on, and dragging or scrolling leaves a wake and stirs the scene. Saving, adding, deleting and finishing things send a wave of colour through it, and an error gives a red shudder
+- Tasks with a deadline can remind you as often as you like: at the time, 5, 15 or 30 minutes, 1 or 2 hours, a day or a week before (pick as many as you want, or set your own amount), and after it is due a reminder every 15 minutes to 4 hours until you tick it off (quiet from 11 PM to 7 AM). Each reminder has Done and Later buttons, and the open app updates straight away when you use them
+- The animated background now has a picture of its own behind everything: calendar pages drifting down. It is faint, so text stays easy to read
+- Aqua changes far more through the day: a rose dawn, gold sunrise, turquoise morning, deep azure noon, warm afternoon, orange sunset, violet dusk and a real dark night with the moon shimmering through the water and glowing plankton. Now and then a cloud passes over and the light dims
+- Super's space changes with the time of day too: a dark night with brighter stars, a rose dawn, teal morning, cobalt noon and a red and amber sunset
+- Opening the app no longer sprays a burst of fast symbols across the background; celebrations are a gentle lift of a few symbols, and only for something you just did
+
 ## v0.6.0
 
 - The animated background now follows the month you are looking at: icy blue with snowflakes in January, pink hearts in February, fresh greens and flowers through spring, warm sunshine and fireworks in summer, falling leaves in autumn and festive red with stars in December. Months that have passed look faded, like a memory

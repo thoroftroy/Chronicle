@@ -146,7 +146,7 @@ fun ChronicleApp() {
     val taskToEdit = remember { mutableStateOf<Task?>(null) }
     fun toggleTaskOn(o: TaskOcc) {
         val i = tasks.indexOfFirst { it.id == o.task.id }
-        if (i >= 0) { tasks[i] = TaskLogic.setDone(tasks[i], o.day, !o.done); saveTasks(); if (!o.done) WonderMood.celebrate(TASK_DONE_GLYPHS) }
+        if (i >= 0) { tasks[i] = TaskLogic.setDone(tasks[i], o.day, !o.done); saveTasks(); if (!o.done) { WonderMood.celebrate(TASK_DONE_GLYPHS); SceneFeed.beat() } }
     }
     // The scene takes on the season of the month you are looking at; past months look faded, like a memory.
     val shownMonth = YearMonth.from(day)

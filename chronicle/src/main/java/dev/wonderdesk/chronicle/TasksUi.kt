@@ -53,13 +53,19 @@ fun TasksView(tasks: MutableList<Task>, save: () -> Unit, openRequest: MutableSt
     val today = LocalDate.now()
 
     fun replace(n: Task) { val i = tasks.indexOfFirst { it.id == n.id }; if (i >= 0) { tasks[i] = n; save() } }
-    fun complete(o: TaskOcc, on: Boolean) { replace(TaskLogic.setDone(o.task, o.day, on)); if (on) WonderMood.celebrate(TASK_DONE_GLYPHS) }
+    fun complete(o: TaskOcc, on: Boolean) { replace(TaskLogic.setDone(o.task, o.day, on)); if (on) { WonderMood.celebrate(TASK_DONE_GLYPHS); SceneFeed.beat() } }
     fun tick(o: TaskOcc, item: String) = replace(TaskLogic.toggleCheck(o.task, o.day, item))
 
     val real = tasks.filter { it.title.isNotEmpty() }
     // Today's list: everything that comes up today, finished or not. Everything else by when it is next due.
     val todayAll = TaskLogic.on(real, today)
     val todayOpen = todayAll.filter { !it.done }
+    // A calendar page drifts in the scene for each task still to do today (and the overdue ones); finishing one stamps a page with a tick
+    // and it falls away. A tide shows how much of today is done.
+    val leftToday = todayOpen.size + real.count { !TaskLogic.repeats(it) && !it.done && (TaskLogic.dueDay(it)?.isBefore(today) == true) }
+    SceneFeedScope()
+    SideEffect { SceneFeed.count = leftToday.coerceAtMost(14) }
+    SceneMoodEffect(SceneMood(level = if (todayAll.isEmpty()) null else (todayAll.size - todayOpen.size).toFloat() / todayAll.size, levelHue = 135f, glyphs = listOf("✓", "•", "·")))
     val overdue = real.filter { !TaskLogic.repeats(it) && !it.done && (TaskLogic.dueDay(it)?.isBefore(today) == true) }.map { TaskLogic.occ(it, TaskLogic.dueDay(it)!!) }
     val upcoming = real.filter { t -> !(TaskLogic.repeats(t) && TaskLogic.scheduledOn(t, today)) && !t.done }.mapNotNull { t -> TaskLogic.nextDay(t, today.plusDays(1))?.takeIf { it.isAfter(today) }?.let { TaskLogic.occ(t, it) } }
         .filter { !(it.task.done) }.sortedBy { it.day.toEpochDay() }

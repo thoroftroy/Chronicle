@@ -1,5 +1,9 @@
 # Chronicle changelog
 
+## v0.7.1
+
+- The moving background holds still while Battery Saver is on, so it uses next to no power then. It still changes with what the app is doing
+
 ## v0.7.0
 
 - In Tasks the background has a calendar page for each task still to do today; ticking one off stamps a page with a tick and it falls away, and a green tide shows how much of today is done

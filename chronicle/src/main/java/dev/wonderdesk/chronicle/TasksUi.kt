@@ -211,7 +211,7 @@ fun TaskSettings() {
     var on by remember { mutableStateOf(DayMarks.rewardOn(context)) }
     var icon by remember { mutableStateOf(DayMarks.rewardIcon(context)) }
     Panel(title = "Tasks", footer = "Days where every task that came up was finished get this icon in the month view and in your task list.") {
-        SwitchRow("Reward icon for finished days", on, { on = it; DayMarks.setRewardOn(context, it) }, icon = WonderIcons.CheckCircle, tint = Color(0xFFF2A516))
+        SwitchRow("Reward icon for finished days", on, { on = it; DayMarks.setRewardOn(context, it) }, icon = WonderIcons.CheckCircle, tint = Color(0xFFF2A516), help = "When you finish every task due on a day, that day gets a small star in the month view. Just a little pat on the back.")
         if (on) {
             PanelDivider()
             Row(Modifier.padding(16.dp, 10.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

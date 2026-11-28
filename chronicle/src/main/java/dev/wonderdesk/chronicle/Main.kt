@@ -863,9 +863,9 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
     }
     Panel(title = "Month view") {
         SwitchRow("Calendar fills the screen", MonthPrefs.full, { MonthPrefs.full = it; MonthPrefs.save(context) },
-            subtitle = "Bigger days with more events. Tap a day to see its list", icon = WonderIcons.CalendarMonth, tint = Color(0xFF1E7FE8))
+            subtitle = "Bigger days with more events. Tap a day to see its list", icon = WonderIcons.CalendarMonth, tint = Color(0xFF1E7FE8), help = "The month stretches to fill the whole screen instead of leaving room for the list of the day underneath.")
         PanelDivider()
-        SwitchRow("Show start times", MonthPrefs.times, { MonthPrefs.times = it; MonthPrefs.save(context) }, subtitle = "Like “9 Dentist”, when the days are wide enough (tablets, landscape)", icon = WonderIcons.Schedule, tint = Color(0xFF16A085))
+        SwitchRow("Show start times", MonthPrefs.times, { MonthPrefs.times = it; MonthPrefs.save(context) }, subtitle = "Like “9 Dentist”, when the days are wide enough (tablets, landscape)", icon = WonderIcons.Schedule, tint = Color(0xFF16A085), help = "Shows when each event starts inside the month boxes. Turn it off to fit more event names.")
     }
     Panel(title = "Time and dates") {
         var ws by remember { mutableIntStateOf(prefs.getInt("weekStart", 0)) }
@@ -878,7 +878,7 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
     }
     Panel(title = "Look") {
         var dw by remember { mutableStateOf(prefs.getBoolean("dimWeekend", true)) }
-        SwitchRow("Dim weekend names", dw, { dw = it; prefs.edit().putBoolean("dimWeekend", it).apply(); revision.intValue++ }, icon = WonderIcons.CalendarMonth, tint = Color(0xFF1E7FE8))
+        SwitchRow("Dim weekend names", dw, { dw = it; prefs.edit().putBoolean("dimWeekend", it).apply(); revision.intValue++ }, icon = WonderIcons.CalendarMonth, tint = Color(0xFF1E7FE8), help = "Saturday and Sunday are greyed in the header so working days stand out.")
         PanelDivider()
         var vt by remember { mutableStateOf(prefs.getString("tab", "month") ?: "month") }
         Column(Modifier.padding(16.dp, 10.dp)) { Text("Open on", style = MaterialTheme.typography.labelLarge)
@@ -904,7 +904,7 @@ private fun CalendarSettings(repo: CalendarRepo, granted: Boolean) {
     }
     Panel(title = "Notifications") {
         SwitchRow("Event reminders", reminders, { reminders = it; prefs.edit().putBoolean("reminders", it).apply() },
-            subtitle = "Chronicle notifies you at each event's reminder time", icon = WonderIcons.Notifications, tint = Color(0xFFE5483C))
+            subtitle = "Chronicle notifies you at each event's reminder time", icon = WonderIcons.Notifications, tint = Color(0xFFE5483C), help = "Chronicle sends its own notification before each event, using the time set on the event. Turn it off if your calendar app already reminds you.")
     }
 }
 

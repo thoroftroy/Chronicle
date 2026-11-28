@@ -276,9 +276,9 @@ class UpcomingWidgetSetup : dev.wonderdesk.shared.WidgetSetupActivity() {
                     }
                 }
                 dev.wonderdesk.shared.PanelDivider()
-                dev.wonderdesk.shared.SwitchRow("Include tasks", tasks, { tasks = it })
+                dev.wonderdesk.shared.SwitchRow("Include tasks", tasks, { tasks = it }, help = "Tasks with a due date count as events here too, so they show up in this list and get the same reminders.")
                 dev.wonderdesk.shared.PanelDivider()
-                dev.wonderdesk.shared.SwitchRow("Hide all repeating events", noRepeats, { noRepeats = it }, subtitle = "Only one-off plans, like appointments and trips")
+                dev.wonderdesk.shared.SwitchRow("Hide all repeating events", noRepeats, { noRepeats = it }, subtitle = "Only one-off plans, like appointments and trips", help = "Leaves out birthdays, weekly classes and other things that come back on their own, so only one-off plans are left.")
             }
             if (titles.isNotEmpty()) dev.wonderdesk.shared.Panel(title = "Events to show", footer = "Switch off the ones you don't need reminding of, like work every day. They still show in Chronicle itself.") {
                 titles.forEachIndexed { i, (t, n, rep) ->
